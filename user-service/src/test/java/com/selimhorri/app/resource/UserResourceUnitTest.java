@@ -85,14 +85,12 @@ class UserResourceUnitTest {
         // Given
         when(userService.save(any(UserDto.class))).thenReturn(testUserDto);
 
-        String userJson = """
-            {
-                "firstName": "John",
-                "lastName": "Doe",
-                "email": "john.doe@test.com",
-                "phone": "1234567890"
-            }
-            """;
+        String userJson = "{\n" +
+            "    \"firstName\": \"John\",\n" +
+            "    \"lastName\": \"Doe\",\n" +
+            "    \"email\": \"john.doe@test.com\",\n" +
+            "    \"phone\": \"1234567890\"\n" +
+            "}";
 
         // When/Then
         mockMvc.perform(post("/api/users")
@@ -114,14 +112,12 @@ class UserResourceUnitTest {
         
         when(userService.update(any(UserDto.class))).thenReturn(updatedUser);
 
-        String userJson = """
-            {
-                "userId": 1,
-                "firstName": "John Updated",
-                "lastName": "Doe Updated",
-                "email": "john.doe@test.com"
-            }
-            """;
+        String userJson = "{\n" +
+            "    \"userId\": 1,\n" +
+            "    \"firstName\": \"John Updated\",\n" +
+            "    \"lastName\": \"Doe Updated\",\n" +
+            "    \"email\": \"john.doe@test.com\"\n" +
+            "}";
 
         // When/Then
         mockMvc.perform(put("/api/users")
