@@ -6,6 +6,8 @@ pipeline {
     }
     
     environment {
+        JAVA_HOME = '/opt/jdk-11.0.25+9'
+        PATH = "/opt/jdk-11.0.25+9/bin:${env.PATH}"
         MAVEN_OPTS = '-Dmaven.test.failure.ignore=true'
     }
     
