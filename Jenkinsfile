@@ -25,7 +25,7 @@ pipeline {
                     steps {
                         echo '� Construyendo user-service (Puerto 8700)...'
                         dir('user-service') {
-                            sh 'mvn clean package -DskipTests'
+                            sh 'mvn clean package -Dmaven.test.skip=true'
                         }
                     }
                 }
@@ -34,7 +34,7 @@ pipeline {
                     steps {
                         echo '🔨 Construyendo product-service (Puerto 8500)...'
                         dir('product-service') {
-                            sh 'mvn clean package -DskipTests'
+                            sh 'mvn clean package -Dmaven.test.skip=true'
                         }
                     }
                 }
@@ -47,7 +47,7 @@ pipeline {
                     steps {
                         echo '🔨 Construyendo favourite-service (Puerto 8800) - Depende de user + product...'
                         dir('favourite-service') {
-                            sh 'mvn clean package -DskipTests'
+                            sh 'mvn clean package -Dmaven.test.skip=true'
                         }
                     }
                 }
@@ -56,7 +56,7 @@ pipeline {
                     steps {
                         echo '🔨 Construyendo order-service (Puerto 8300) - Depende de user + product...'
                         dir('order-service') {
-                            sh 'mvn clean package -DskipTests'
+                            sh 'mvn clean package -Dmaven.test.skip=true'
                         }
                     }
                 }
@@ -69,7 +69,7 @@ pipeline {
                     steps {
                         echo '� Construyendo payment-service (Puerto 8400) - Depende de order...'
                         dir('payment-service') {
-                            sh 'mvn clean package -DskipTests'
+                            sh 'mvn clean package -Dmaven.test.skip=true'
                         }
                     }
                 }
@@ -78,7 +78,7 @@ pipeline {
                     steps {
                         echo '🔨 Construyendo shipping-service (Puerto 8600) - Depende de order...'
                         dir('shipping-service') {
-                            sh 'mvn clean package -DskipTests'
+                            sh 'mvn clean package -Dmaven.test.skip=true'
                         }
                     }
                 }
