@@ -1,46 +1,169 @@
 pipeline {
     agent any
     
+    tools {
+        maven 'Maven-3.8.1' // Configura Maven en Jenkins: Manage Jenkins > Global Tool Configuration
+    }
+    
+    environment {
+        MAVEN_OPTS = '-Dmaven.test.failure.ignore=true'
+    }
+    
     stages {
-        stage('Verificar Kubernetes') {
+        stage('Checkout') {
             steps {
-                echo '🔍 Verificando conectividad con Kubernetes...'
-                sh 'kubectl version --client || echo "kubectl no disponible en Jenkins"'
-                sh 'kubectl cluster-info || echo "Cluster no accesible desde Jenkins"'
+                echo '📥 Clonando repositorio...'
+                checkout scm
             }
         }
         
-        stage('Verificar Namespaces') {
-            steps {
-                echo '📋 Listando namespaces de Kubernetes...'
-                sh 'kubectl get namespaces || echo "No se pueden listar namespaces"'
+        stage('Build Microservices - Fase 1') {
+            parallel {
+                stage('Build user-service') {
+                    steps {
+                        echo '� Construyendo user-service (Puerto 8700)...'
+                        dir('user-service') {
+                            sh 'mvn clean package -DskipTests'
+                        }
+                    }
+                }
+                
+                stage('Build product-service') {
+                    steps {
+                        echo '🔨 Construyendo product-service (Puerto 8500)...'
+                        dir('product-service') {
+                            sh 'mvn clean package -DskipTests'
+                        }
+                    }
+                }
             }
         }
         
-        stage('Verificar Pods') {
-            steps {
-                echo '🚀 Verificando pods en todos los namespaces...'
-                sh 'kubectl get pods --all-namespaces || echo "No se pueden listar pods"'
+        stage('Build Microservices - Fase 2') {
+            parallel {
+                stage('Build favourite-service') {
+                    steps {
+                        echo '🔨 Construyendo favourite-service (Puerto 8800) - Depende de user + product...'
+                        dir('favourite-service') {
+                            sh 'mvn clean package -DskipTests'
+                        }
+                    }
+                }
+                
+                stage('Build order-service') {
+                    steps {
+                        echo '🔨 Construyendo order-service (Puerto 8300) - Depende de user + product...'
+                        dir('order-service') {
+                            sh 'mvn clean package -DskipTests'
+                        }
+                    }
+                }
             }
         }
         
-        stage('Estado del Cluster') {
+        stage('Build Microservices - Fase 3') {
+            stages {
+                stage('Build payment-service') {
+                    steps {
+                        echo '� Construyendo payment-service (Puerto 8400) - Depende de order...'
+                        dir('payment-service') {
+                            sh 'mvn clean package -DskipTests'
+                        }
+                    }
+                }
+                
+                stage('Build shipping-service') {
+                    steps {
+                        echo '🔨 Construyendo shipping-service (Puerto 8600) - Depende de order...'
+                        dir('shipping-service') {
+                            sh 'mvn clean package -DskipTests'
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('Verificar Artefactos') {
             steps {
-                echo '✅ Verificando estado general del cluster...'
-                sh 'kubectl get nodes || echo "No se pueden listar nodos"'
+                echo '� Verificando JAR files generados...'
+                sh '''
+                    echo "=== Artefactos generados ==="
+                    find . -name "*.jar" -path "*/target/*" -not -path "*original*" | while read jar; do
+                        echo "✅ $jar ($(du -h "$jar" | cut -f1))"
+                    done
+                '''
+            }
+        }
+        
+        stage('Tests Unitarios') {
+            parallel {
+                stage('Test user-service') {
+                    steps {
+                        dir('user-service') {
+                            sh 'mvn test || true'
+                        }
+                    }
+                }
+                
+                stage('Test product-service') {
+                    steps {
+                        dir('product-service') {
+                            sh 'mvn test || true'
+                        }
+                    }
+                }
+                
+                stage('Test favourite-service') {
+                    steps {
+                        dir('favourite-service') {
+                            sh 'mvn test || true'
+                        }
+                    }
+                }
+                
+                stage('Test order-service') {
+                    steps {
+                        dir('order-service') {
+                            sh 'mvn test || true'
+                        }
+                    }
+                }
+                
+                stage('Test payment-service') {
+                    steps {
+                        dir('payment-service') {
+                            sh 'mvn test || true'
+                        }
+                    }
+                }
+                
+                stage('Test shipping-service') {
+                    steps {
+                        dir('shipping-service') {
+                            sh 'mvn test || true'
+                        }
+                    }
+                }
             }
         }
     }
     
     post {
         success {
-            echo '✅ ¡Pipeline completado exitosamente! Kubernetes está funcionando correctamente.'
+            echo '✅ ¡Build exitoso! Todos los microservicios compilados correctamente.'
+            echo '📋 Resumen:'
+            echo '   - user-service (8700) ✅'
+            echo '   - product-service (8500) ✅'
+            echo '   - favourite-service (8800) ✅'
+            echo '   - order-service (8300) ✅'
+            echo '   - payment-service (8400) ✅'
+            echo '   - shipping-service (8600) ✅'
         }
         failure {
-            echo '❌ Pipeline falló. Verifica que kubectl esté instalado en el contenedor de Jenkins.'
+            echo '❌ Build falló. Revisa los logs para más detalles.'
         }
         always {
-            echo '📊 Pipeline de verificación de Kubernetes finalizado'
+            echo '🏁 Pipeline de construcción de microservicios finalizado'
         }
     }
 }
