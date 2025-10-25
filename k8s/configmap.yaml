@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ecommerce-config
+  namespace: ecommerce
+data:
+  application.yml: |
+    server:
+      port: 8080
+    spring:
+      application:
+        name: ecommerce-app
+      profiles:
+        active: prod
