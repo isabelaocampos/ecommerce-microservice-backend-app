@@ -1,7 +1,9 @@
 package com.selimhorri.app.service;
 
 import com.selimhorri.app.domain.Order;
+import com.selimhorri.app.domain.Cart;
 import com.selimhorri.app.dto.OrderDto;
+import com.selimhorri.app.dto.CartDto;
 import com.selimhorri.app.repository.OrderRepository;
 import com.selimhorri.app.service.impl.OrderServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
@@ -36,13 +38,20 @@ class OrderServiceUnitTest {
     private OrderServiceImpl orderService;
 
     private Order testOrder;
+    private Cart testCart;
 
     @BeforeEach
     void setUp() {
+        // Setup Cart
+        testCart = new Cart();
+        testCart.setCartId(1);
+        
+        // Setup Order with Cart
         testOrder = new Order();
         testOrder.setOrderId(1);
         testOrder.setOrderDate(LocalDateTime.now());
         testOrder.setOrderDesc("Test Order");
+        testOrder.setCart(testCart);
     }
 
     @Test
@@ -83,6 +92,11 @@ class OrderServiceUnitTest {
 
         OrderDto orderDto = new OrderDto();
         orderDto.setOrderDesc("Test Order");
+        
+        // Add CartDto to avoid NullPointerException
+        CartDto cartDto = new CartDto();
+        cartDto.setCartId(1);
+        orderDto.setCartDto(cartDto);
 
         // When
         OrderDto result = orderService.save(orderDto);
