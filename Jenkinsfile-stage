@@ -45,9 +45,9 @@ pipeline {
                                 echo '🐳 Construyendo imagen Docker de user-service...'
                                 dir('user-service') {
                                     sh '''
-                                        eval $(minikube docker-env)
                                         docker build -t user-service:latest .
                                         docker tag user-service:latest user-service:${BUILD_NUMBER}
+                                        minikube image load user-service:latest
                                     '''
                                 }
                             }
@@ -78,9 +78,9 @@ pipeline {
                                 echo '🐳 Construyendo imagen Docker de product-service...'
                                 dir('product-service') {
                                     sh '''
-                                        eval $(minikube docker-env)
                                         docker build -t product-service:latest .
                                         docker tag product-service:latest product-service:${BUILD_NUMBER}
+                                        minikube image load product-service:latest
                                     '''
                                 }
                             }
@@ -115,9 +115,9 @@ pipeline {
                                 echo '🐳 Construyendo imagen Docker de favourite-service...'
                                 dir('favourite-service') {
                                     sh '''
-                                        eval $(minikube docker-env)
                                         docker build -t favourite-service:latest .
                                         docker tag favourite-service:latest favourite-service:${BUILD_NUMBER}
+                                        minikube image load favourite-service:latest
                                     '''
                                 }
                             }
@@ -148,9 +148,9 @@ pipeline {
                                 echo '🐳 Construyendo imagen Docker de order-service...'
                                 dir('order-service') {
                                     sh '''
-                                        eval $(minikube docker-env)
                                         docker build -t order-service:latest .
                                         docker tag order-service:latest order-service:${BUILD_NUMBER}
+                                        minikube image load order-service:latest
                                     '''
                                 }
                             }
@@ -185,9 +185,9 @@ pipeline {
                                 echo '🐳 Construyendo imagen Docker de payment-service...'
                                 dir('payment-service') {
                                     sh '''
-                                        eval $(minikube docker-env)
                                         docker build -t payment-service:latest .
                                         docker tag payment-service:latest payment-service:${BUILD_NUMBER}
+                                        minikube image load payment-service:latest
                                     '''
                                 }
                             }
@@ -218,9 +218,9 @@ pipeline {
                                 echo '🐳 Construyendo imagen Docker de shipping-service...'
                                 dir('shipping-service') {
                                     sh '''
-                                        eval $(minikube docker-env)
                                         docker build -t shipping-service:latest .
                                         docker tag shipping-service:latest shipping-service:${BUILD_NUMBER}
+                                        minikube image load shipping-service:latest
                                     '''
                                 }
                             }
@@ -240,9 +240,12 @@ pipeline {
                     done
                     
                     echo ""
-                    echo "=== Docker Images Disponibles ==="
-                    eval $(minikube docker-env)
+                    echo "=== Docker Images en Host ==="
                     docker images | grep -E "(user-service|product-service|favourite-service|order-service|payment-service|shipping-service)" || true
+                    
+                    echo ""
+                    echo "=== Docker Images en Minikube ==="
+                    minikube image ls | grep -E "(user-service|product-service|favourite-service|order-service|payment-service|shipping-service)" || true
                 '''
             }
         }
@@ -525,3 +528,4 @@ pipeline {
         }
     }
 }
+
