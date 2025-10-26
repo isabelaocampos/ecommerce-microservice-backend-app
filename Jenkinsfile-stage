@@ -7,7 +7,6 @@ pipeline {
     
     environment {
         JAVA_HOME = '/opt/jdk-11.0.25+9'
-        PATH = "/opt/jdk-11.0.25+9/bin:${env.PATH}"
         MAVEN_OPTS = '-Dmaven.test.failure.ignore=true'
         MINIKUBE_IP = sh(script: 'kubectl config view -o jsonpath=\'{.clusters[0].cluster.server}\' | sed \'s|https://||;s|:.*||\'', returnStdout: true).trim()
         DOCKER_BUILDKIT = '1'
@@ -29,7 +28,7 @@ pipeline {
                             steps {
                                 echo '🔨 Construyendo user-service...'
                                 dir('user-service') {
-                                    sh 'mvn clean package -DskipTests'
+                                    sh './mvnw clean package -DskipTests'
                                 }
                             }
                         }
@@ -37,7 +36,7 @@ pipeline {
                             steps {
                                 echo '🧪 Ejecutando tests de user-service...'
                                 dir('user-service') {
-                                    sh 'mvn test || true'
+                                    sh './mvnw test || true'
                                 }
                             }
                         }
@@ -62,7 +61,7 @@ pipeline {
                             steps {
                                 echo '🔨 Construyendo product-service...'
                                 dir('product-service') {
-                                    sh 'mvn clean package -DskipTests'
+                                    sh './mvnw clean package -DskipTests'
                                 }
                             }
                         }
@@ -70,7 +69,7 @@ pipeline {
                             steps {
                                 echo '🧪 Ejecutando tests de product-service...'
                                 dir('product-service') {
-                                    sh 'mvn test || true'
+                                    sh './mvnw test || true'
                                 }
                             }
                         }
@@ -99,7 +98,7 @@ pipeline {
                             steps {
                                 echo '🔨 Construyendo favourite-service...'
                                 dir('favourite-service') {
-                                    sh 'mvn clean package -DskipTests'
+                                    sh './mvnw clean package -DskipTests'
                                 }
                             }
                         }
@@ -107,7 +106,7 @@ pipeline {
                             steps {
                                 echo '🧪 Ejecutando tests de favourite-service...'
                                 dir('favourite-service') {
-                                    sh 'mvn test || true'
+                                    sh './mvnw test || true'
                                 }
                             }
                         }
@@ -132,7 +131,7 @@ pipeline {
                             steps {
                                 echo '🔨 Construyendo order-service...'
                                 dir('order-service') {
-                                    sh 'mvn clean package -DskipTests'
+                                    sh './mvnw clean package -DskipTests'
                                 }
                             }
                         }
@@ -140,7 +139,7 @@ pipeline {
                             steps {
                                 echo '🧪 Ejecutando tests de order-service...'
                                 dir('order-service') {
-                                    sh 'mvn test || true'
+                                    sh './mvnw test || true'
                                 }
                             }
                         }
@@ -169,7 +168,7 @@ pipeline {
                             steps {
                                 echo '🔨 Construyendo payment-service...'
                                 dir('payment-service') {
-                                    sh 'mvn clean package -DskipTests'
+                                    sh './mvnw clean package -DskipTests'
                                 }
                             }
                         }
@@ -177,7 +176,7 @@ pipeline {
                             steps {
                                 echo '🧪 Ejecutando tests de payment-service...'
                                 dir('payment-service') {
-                                    sh 'mvn test || true'
+                                    sh './mvnw test || true'
                                 }
                             }
                         }
@@ -202,7 +201,7 @@ pipeline {
                             steps {
                                 echo '🔨 Construyendo shipping-service...'
                                 dir('shipping-service') {
-                                    sh 'mvn clean package -DskipTests'
+                                    sh './mvnw clean package -DskipTests'
                                 }
                             }
                         }
@@ -210,7 +209,7 @@ pipeline {
                             steps {
                                 echo '🧪 Ejecutando tests de shipping-service...'
                                 dir('shipping-service') {
-                                    sh 'mvn test || true'
+                                    sh './mvnw test || true'
                                 }
                             }
                         }
