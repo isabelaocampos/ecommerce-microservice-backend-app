@@ -277,7 +277,7 @@ if ($allChecksPass) {
     Write-Host ""
     Write-Host "⚠️  Por favor, corrige los errores antes de ejecutar el pipeline" -ForegroundColor Yellow
     Write-Host ""
-    Write-Host "📚 Documentación de ayuda:" -ForegroundColor Yellow
+    Write-Host "Documentacion de ayuda:" -ForegroundColor Yellow
     Write-Host "   - GUIA-CONFIGURACION-JENKINS-K8S.md" -ForegroundColor White
     Write-Host "   - CONFIGURACION-PIPELINE-JENKINS.md" -ForegroundColor White
     Write-Host "   - PIPELINE-STAGE-K8S.md" -ForegroundColor White
