@@ -1,0 +1,75 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+  namespace: ecommerce
+  labels:
+    app: user-service
+    tier: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: user-service
+  template:
+    metadata:
+      labels:
+        app: user-service
+        tier: backend
+    spec:
+      containers:
+      - name: user-service
+        image: user-service:latest
+        imagePullPolicy: Never  # Para usar imagen local de Minikube
+        ports:
+        - containerPort: 8700
+          name: http
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: "stage"
+        - name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
+          value: "http://service-discovery:8761/eureka/"
+        - name: ZIPKIN_BASE_URL
+          value: "http://zipkin:9411"
+        livenessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8700
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8700
+          initialDelaySeconds: 30
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-service
+  namespace: ecommerce
+  labels:
+    app: user-service
+spec:
+  type: NodePort
+  selector:
+    app: user-service
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8700
+      targetPort: 8700
+      nodePort: 30700  # Puerto externo para acceder desde fuera del cluster
