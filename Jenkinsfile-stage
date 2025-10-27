@@ -45,11 +45,12 @@ pipeline {
                                 echo '🐳 Construyendo imagen Docker de user-service...'
                                 dir('user-service') {
                                     sh '''
+                                        # Build image
                                         docker build -t user-service:latest .
                                         docker tag user-service:latest user-service:${BUILD_NUMBER}
-                                        docker save user-service:latest -o /tmp/user-service.tar
-                                        minikube image load /tmp/user-service.tar
-                                        rm /tmp/user-service.tar
+                                        
+                                        # Load into minikube via SSH
+                                        docker save user-service:latest | minikube ssh --native-ssh=false "docker load"
                                     '''
                                 }
                             }
@@ -82,9 +83,7 @@ pipeline {
                                     sh '''
                                         docker build -t product-service:latest .
                                         docker tag product-service:latest product-service:${BUILD_NUMBER}
-                                        docker save product-service:latest -o /tmp/product-service.tar
-                                        minikube image load /tmp/product-service.tar
-                                        rm /tmp/product-service.tar
+                                        docker save product-service:latest | minikube ssh --native-ssh=false "docker load"
                                     '''
                                 }
                             }
@@ -121,9 +120,7 @@ pipeline {
                                     sh '''
                                         docker build -t favourite-service:latest .
                                         docker tag favourite-service:latest favourite-service:${BUILD_NUMBER}
-                                        docker save favourite-service:latest -o /tmp/favourite-service.tar
-                                        minikube image load /tmp/favourite-service.tar
-                                        rm /tmp/favourite-service.tar
+                                        docker save favourite-service:latest | minikube ssh --native-ssh=false "docker load"
                                     '''
                                 }
                             }
@@ -156,9 +153,7 @@ pipeline {
                                     sh '''
                                         docker build -t order-service:latest .
                                         docker tag order-service:latest order-service:${BUILD_NUMBER}
-                                        docker save order-service:latest -o /tmp/order-service.tar
-                                        minikube image load /tmp/order-service.tar
-                                        rm /tmp/order-service.tar
+                                        docker save order-service:latest | minikube ssh --native-ssh=false "docker load"
                                     '''
                                 }
                             }
@@ -195,9 +190,7 @@ pipeline {
                                     sh '''
                                         docker build -t payment-service:latest .
                                         docker tag payment-service:latest payment-service:${BUILD_NUMBER}
-                                        docker save payment-service:latest -o /tmp/payment-service.tar
-                                        minikube image load /tmp/payment-service.tar
-                                        rm /tmp/payment-service.tar
+                                        docker save payment-service:latest | minikube ssh --native-ssh=false "docker load"
                                     '''
                                 }
                             }
@@ -230,9 +223,7 @@ pipeline {
                                     sh '''
                                         docker build -t shipping-service:latest .
                                         docker tag shipping-service:latest shipping-service:${BUILD_NUMBER}
-                                        docker save shipping-service:latest -o /tmp/shipping-service.tar
-                                        minikube image load /tmp/shipping-service.tar
-                                        rm /tmp/shipping-service.tar
+                                        docker save shipping-service:latest | minikube ssh --native-ssh=false "docker load"
                                     '''
                                 }
                             }
@@ -540,5 +531,6 @@ pipeline {
         }
     }
 }
+
 
 
