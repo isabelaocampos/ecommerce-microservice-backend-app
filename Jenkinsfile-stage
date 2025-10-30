@@ -45,9 +45,15 @@ pipeline {
                                 echo '🐳 Construyendo imagen Docker de user-service...'
                                 dir('user-service') {
                                     sh '''
+                                        # Configurar para usar el Docker de Minikube
+                                        eval $(minikube -p minikube docker-env)
+                                        
+                                        # Construir imagen directamente en Minikube
                                         docker build -t user-service:latest .
                                         docker tag user-service:latest user-service:${BUILD_NUMBER}
-                                        docker save user-service:latest | minikube ssh --native-ssh=false "docker load"
+                                        
+                                        # Verificar que la imagen existe
+                                        docker images | grep user-service
                                     '''
                                 }
                             }
@@ -78,9 +84,10 @@ pipeline {
                                 echo '🐳 Construyendo imagen Docker de product-service...'
                                 dir('product-service') {
                                     sh '''
+                                        eval $(minikube -p minikube docker-env)
                                         docker build -t product-service:latest .
                                         docker tag product-service:latest product-service:${BUILD_NUMBER}
-                                        docker save product-service:latest | minikube ssh --native-ssh=false "docker load"
+                                        docker images | grep product-service
                                     '''
                                 }
                             }
@@ -115,9 +122,10 @@ pipeline {
                                 echo '🐳 Construyendo imagen Docker de favourite-service...'
                                 dir('favourite-service') {
                                     sh '''
+                                        eval $(minikube -p minikube docker-env)
                                         docker build -t favourite-service:latest .
                                         docker tag favourite-service:latest favourite-service:${BUILD_NUMBER}
-                                        docker save favourite-service:latest | minikube ssh --native-ssh=false "docker load"
+                                        docker images | grep favourite-service
                                     '''
                                 }
                             }
@@ -148,9 +156,10 @@ pipeline {
                                 echo '🐳 Construyendo imagen Docker de order-service...'
                                 dir('order-service') {
                                     sh '''
+                                        eval $(minikube -p minikube docker-env)
                                         docker build -t order-service:latest .
                                         docker tag order-service:latest order-service:${BUILD_NUMBER}
-                                        docker save order-service:latest | minikube ssh --native-ssh=false "docker load"
+                                        docker images | grep order-service
                                     '''
                                 }
                             }
@@ -185,9 +194,10 @@ pipeline {
                                 echo '🐳 Construyendo imagen Docker de payment-service...'
                                 dir('payment-service') {
                                     sh '''
+                                        eval $(minikube -p minikube docker-env)
                                         docker build -t payment-service:latest .
                                         docker tag payment-service:latest payment-service:${BUILD_NUMBER}
-                                        docker save payment-service:latest | minikube ssh --native-ssh=false "docker load"
+                                        docker images | grep payment-service
                                     '''
                                 }
                             }
@@ -218,9 +228,10 @@ pipeline {
                                 echo '🐳 Construyendo imagen Docker de shipping-service...'
                                 dir('shipping-service') {
                                     sh '''
+                                        eval $(minikube -p minikube docker-env)
                                         docker build -t shipping-service:latest .
                                         docker tag shipping-service:latest shipping-service:${BUILD_NUMBER}
-                                        docker save shipping-service:latest | minikube ssh --native-ssh=false "docker load"
+                                        docker images | grep shipping-service
                                     '''
                                 }
                             }
@@ -240,12 +251,9 @@ pipeline {
                     done
                     
                     echo ""
-                    echo "=== Docker Images en Host ==="
-                    docker images | grep -E "(user-service|product-service|favourite-service|order-service|payment-service|shipping-service)" || true
-                    
-                    echo ""
                     echo "=== Docker Images en Minikube ==="
-                    minikube image ls | grep -E "(user-service|product-service|favourite-service|order-service|payment-service|shipping-service)" || true
+                    eval $(minikube -p minikube docker-env)
+                    docker images | grep -E "(user-service|product-service|favourite-service|order-service|payment-service|shipping-service)" || true
                 '''
             }
         }
