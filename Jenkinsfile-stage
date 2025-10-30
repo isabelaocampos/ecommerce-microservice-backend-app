@@ -50,7 +50,7 @@ pipeline {
                                         docker tag user-service:latest user-service:${BUILD_NUMBER}
                                         
                                         # Load into minikube via SSH
-                                        docker save user-service:latest | minikube ssh --native-ssh=false "docker load"
+                                        docker save user-service:latest | docker exec -i minikube docker load
                                     '''
                                 }
                             }
@@ -83,7 +83,7 @@ pipeline {
                                     sh '''
                                         docker build -t product-service:latest .
                                         docker tag product-service:latest product-service:${BUILD_NUMBER}
-                                        docker save product-service:latest | minikube ssh --native-ssh=false "docker load"
+                                        docker save product-service:latest | docker exec -i minikube docker load
                                     '''
                                 }
                             }
@@ -120,7 +120,7 @@ pipeline {
                                     sh '''
                                         docker build -t favourite-service:latest .
                                         docker tag favourite-service:latest favourite-service:${BUILD_NUMBER}
-                                        docker save favourite-service:latest | minikube ssh --native-ssh=false "docker load"
+                                        docker save favourite-service:latest | docker exec -i minikube docker load
                                     '''
                                 }
                             }
@@ -153,7 +153,7 @@ pipeline {
                                     sh '''
                                         docker build -t order-service:latest .
                                         docker tag order-service:latest order-service:${BUILD_NUMBER}
-                                        docker save order-service:latest | minikube ssh --native-ssh=false "docker load"
+                                        docker save order-service:latest | docker exec -i minikube docker load
                                     '''
                                 }
                             }
@@ -190,7 +190,7 @@ pipeline {
                                     sh '''
                                         docker build -t payment-service:latest .
                                         docker tag payment-service:latest payment-service:${BUILD_NUMBER}
-                                        docker save payment-service:latest | minikube ssh --native-ssh=false "docker load"
+                                        docker save payment-service:latest | docker exec -i minikube docker load
                                     '''
                                 }
                             }
@@ -223,7 +223,7 @@ pipeline {
                                     sh '''
                                         docker build -t shipping-service:latest .
                                         docker tag shipping-service:latest shipping-service:${BUILD_NUMBER}
-                                        docker save shipping-service:latest | minikube ssh --native-ssh=false "docker load"
+                                        docker save shipping-service:latest | docker exec -i minikube docker load
                                     '''
                                 }
                             }
