@@ -12,6 +12,23 @@ pipeline {
     }
     
     stages {
+        stage('🔧 Configurar Kubernetes') {
+            steps {
+                echo '⚙️ Configurando acceso a Kubernetes/Minikube...'
+                sh '''
+                    # Opción 1: Intentar usar minikube update-context para corregir las rutas
+                    minikube update-context || true
+                    
+                    # Opción 2: Si falla, usar kubectl desde minikube directamente
+                    # Verificar conexión
+                    kubectl version --client || echo "kubectl encontrado"
+                    
+                    # Verificar que podemos conectar con minikube
+                    kubectl get nodes || minikube kubectl -- get nodes
+                '''
+            }
+        }
+        
         stage('🔍 Checkout') {
             steps {
                 echo '📥 Clonando repositorio...'
@@ -252,27 +269,36 @@ pipeline {
             steps {
                 echo '☸️ Desplegando microservicios en Kubernetes...'
                 sh '''
+                    # Asegurar que tenemos el contexto correcto
+                    minikube update-context || true
+                    
+                    # Usar kubectl a través de minikube si el directo falla
+                    KUBECTL_CMD="kubectl"
+                    if ! kubectl version --client > /dev/null 2>&1; then
+                        KUBECTL_CMD="minikube kubectl --"
+                    fi
+                    
                     # Crear namespace si no existe
-                    kubectl get namespace ecommerce || kubectl create namespace ecommerce
+                    $KUBECTL_CMD get namespace ecommerce || $KUBECTL_CMD create namespace ecommerce
                     
                     # Aplicar deployments
                     echo "🔌 Desplegando user-service..."
-                    kubectl apply -f k8s/user-service-deployment.yaml
+                    $KUBECTL_CMD apply -f k8s/user-service-deployment.yaml
                     
                     echo "🔌 Desplegando product-service..."
-                    kubectl apply -f k8s/product-service-deployment.yaml
+                    $KUBECTL_CMD apply -f k8s/product-service-deployment.yaml
                     
                     echo "🔌 Desplegando favourite-service..."
-                    kubectl apply -f k8s/favourite-service-deployment.yaml
+                    $KUBECTL_CMD apply -f k8s/favourite-service-deployment.yaml
                     
                     echo "🔌 Desplegando order-service..."
-                    kubectl apply -f k8s/order-service-deployment.yaml
+                    $KUBECTL_CMD apply -f k8s/order-service-deployment.yaml
                     
                     echo "🔌 Desplegando payment-service..."
-                    kubectl apply -f k8s/payment-service-deployment.yaml
+                    $KUBECTL_CMD apply -f k8s/payment-service-deployment.yaml
                     
                     echo "🔌 Desplegando shipping-service..."
-                    kubectl apply -f k8s/shipping-service-deployment.yaml
+                    $KUBECTL_CMD apply -f k8s/shipping-service-deployment.yaml
                     
                     echo ""
                     echo "✅ Deployments aplicados"
@@ -284,27 +310,33 @@ pipeline {
             steps {
                 echo '⏰ Esperando que los pods estén listos...'
                 sh '''
+                    # Determinar comando kubectl correcto
+                    KUBECTL_CMD="kubectl"
+                    if ! kubectl version --client > /dev/null 2>&1; then
+                        KUBECTL_CMD="minikube kubectl --"
+                    fi
+                    
                     echo "Esperando user-service..."
-                    kubectl wait --for=condition=available --timeout=120s deployment/user-service -n ecommerce || true
+                    $KUBECTL_CMD wait --for=condition=available --timeout=120s deployment/user-service -n ecommerce || true
                     
                     echo "Esperando product-service..."
-                    kubectl wait --for=condition=available --timeout=120s deployment/product-service -n ecommerce || true
+                    $KUBECTL_CMD wait --for=condition=available --timeout=120s deployment/product-service -n ecommerce || true
                     
                     echo "Esperando favourite-service..."
-                    kubectl wait --for=condition=available --timeout=120s deployment/favourite-service -n ecommerce || true
+                    $KUBECTL_CMD wait --for=condition=available --timeout=120s deployment/favourite-service -n ecommerce || true
                     
                     echo "Esperando order-service..."
-                    kubectl wait --for=condition=available --timeout=120s deployment/order-service -n ecommerce || true
+                    $KUBECTL_CMD wait --for=condition=available --timeout=120s deployment/order-service -n ecommerce || true
                     
                     echo "Esperando payment-service..."
-                    kubectl wait --for=condition=available --timeout=120s deployment/payment-service -n ecommerce || true
+                    $KUBECTL_CMD wait --for=condition=available --timeout=120s deployment/payment-service -n ecommerce || true
                     
                     echo "Esperando shipping-service..."
-                    kubectl wait --for=condition=available --timeout=120s deployment/shipping-service -n ecommerce || true
+                    $KUBECTL_CMD wait --for=condition=available --timeout=120s deployment/shipping-service -n ecommerce || true
                     
                     echo ""
                     echo "Estado de los pods:"
-                    kubectl get pods -n ecommerce
+                    $KUBECTL_CMD get pods -n ecommerce
                 '''
             }
         }
@@ -450,21 +482,27 @@ pipeline {
             steps {
                 echo '📋 Generando reporte del deployment...'
                 sh '''
+                    # Determinar comando kubectl correcto
+                    KUBECTL_CMD="kubectl"
+                    if ! kubectl version --client > /dev/null 2>&1; then
+                        KUBECTL_CMD="minikube kubectl --"
+                    fi
+                    
                     echo "========================================="
                     echo "    REPORTE DE DEPLOYMENT - STAGE"
                     echo "========================================="
                     echo ""
                     
                     echo "📦 Deployments:"
-                    kubectl get deployments -n ecommerce
+                    $KUBECTL_CMD get deployments -n ecommerce
                     echo ""
                     
                     echo "🎯 Services:"
-                    kubectl get services -n ecommerce
+                    $KUBECTL_CMD get services -n ecommerce
                     echo ""
                     
                     echo "🐳 Pods:"
-                    kubectl get pods -n ecommerce
+                    $KUBECTL_CMD get pods -n ecommerce
                     echo ""
                     
                     echo "📡 Endpoints de los servicios:"
@@ -496,14 +534,20 @@ pipeline {
         failure {
             echo '❌ Pipeline falló. Revisando estado...'
             sh '''
+                # Determinar comando kubectl correcto
+                KUBECTL_CMD="kubectl"
+                if ! kubectl version --client > /dev/null 2>&1; then
+                    KUBECTL_CMD="minikube kubectl --"
+                fi
+                
                 echo "Estado de pods en ecommerce namespace:"
-                kubectl get pods -n ecommerce || true
+                $KUBECTL_CMD get pods -n ecommerce || true
                 
                 echo ""
                 echo "Logs de pods con problemas:"
-                kubectl get pods -n ecommerce -o json | jq -r '.items[] | select(.status.phase != "Running") | .metadata.name' | while read pod; do
+                $KUBECTL_CMD get pods -n ecommerce -o json | jq -r '.items[] | select(.status.phase != "Running") | .metadata.name' | while read pod; do
                     echo "=== Logs de $pod ==="
-                    kubectl logs $pod -n ecommerce --tail=50 || true
+                    $KUBECTL_CMD logs $pod -n ecommerce --tail=50 || true
                 done
             '''
         }
