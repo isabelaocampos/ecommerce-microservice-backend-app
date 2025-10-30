@@ -7,7 +7,7 @@ pipeline {
     
     environment {
         JAVA_HOME = '/opt/jdk-11.0.2'
-    MAVEN_OPTS = '-Dmaven.test.failure.ignore=true -Dhttps.protocols=TLSv1.2'
+        MAVEN_OPTS = '-Dmaven.test.failure.ignore=true'
         MINIKUBE_IP = sh(script: 'kubectl config view -o jsonpath=\'{.clusters[0].cluster.server}\' | sed \'s|https://||;s|:.*||\'', returnStdout: true).trim()
         DOCKER_BUILDKIT = '1'
     }
@@ -17,69 +17,6 @@ pipeline {
             steps {
                 echo '📥 Clonando repositorio...'
                 checkout scm
-            }
-        }
-        
-        stage('🔧 Prereqs: Docker socket & Minikube') {
-            steps {
-                echo '🔎 Verificando acceso a Docker y estado de Minikube...'
-                sh '''#!/usr/bin/env bash
-                set -eo pipefail
-
-                echo "Checking /var/run/docker.sock..."
-                rm -f .use_minikube_docker || true
-                    if [ ! -S /var/run/docker.sock ]; then
-                        echo "❌ Docker socket not found at /var/run/docker.sock"
-                        echo "Make sure the Jenkins agent/container mounts /var/run/docker.sock from the host."
-                        exit 1
-                    fi
-
-                    ls -l /var/run/docker.sock || true
-
-                    echo "Trying 'docker info' to validate access..."
-                        if docker info >/dev/null 2>&1; then
-                        echo "✅ Docker daemon is accessible"
-                    else
-                        echo "⚠️ Docker daemon not accessible (permission denied or not running)"
-                        if [ "$(id -u)" = "0" ]; then
-                            echo "Running as root inside agent: attempting to chmod /var/run/docker.sock to 666"
-                            chmod 666 /var/run/docker.sock || true
-                            sleep 1
-                            if docker info >/dev/null 2>&1; then
-                                echo "✅ Docker access fixed by chmod"
-                            else
-                                echo "❌ Docker still not accessible after chmod. Ensure Docker socket is mounted and Docker daemon is running on the host."
-                                exit 1
-                            fi
-                        else
-                            echo "You are not root in the agent; cannot change socket permissions."
-                            # Try to fall back to building inside Minikube's docker daemon if minikube is available and running
-                            if command -v minikube >/dev/null 2>&1 && minikube status >/dev/null 2>&1 && minikube status | grep -q "host: Running"; then
-                                echo "⚠️ Docker socket not accessible, but Minikube is running. Will build images using Minikube's docker daemon as a fallback."
-                                touch .use_minikube_docker
-                            else
-                                echo "Please start the Jenkins agent/container with the docker socket mounted and adjusted ownership (or run the agent as root)."
-                                exit 1
-                            fi
-                        fi
-                    fi
-
-                    echo "Checking Minikube status..."
-                    if minikube status --format '{{.Host}}' >/dev/null 2>&1; then
-                        echo "minikube appears to be installed. Checking if it's running..."
-                        if minikube status | grep -q "host: Running"; then
-                            echo "✅ Minikube host is Running"
-                        else
-                            echo "⚠️ Minikube is not running — starting with docker driver..."
-                            minikube start --driver=docker --memory=4096 --cpus=2 || { echo "Failed to start minikube"; exit 1; }
-                        fi
-                    else
-                        echo "⚠️ minikube command not found or status check failed. Install minikube on the machine where the pipeline runs."
-                        exit 1
-                    fi
-
-                    echo "Prereqs OK"
-                '''
             }
         }
         
@@ -97,18 +34,10 @@ pipeline {
                     steps {
                         echo '🐳 Construyendo imagen Docker de api-gateway...'
                         dir('api-gateway') {
-                            sh '''#!/usr/bin/env bash
-set -eo pipefail
-
-                                if [ -f .use_minikube_docker ]; then
-                                    echo "Using Minikube docker daemon for build"
-                                    eval $(minikube -p minikube docker-env --shell=bash)
-                                    docker build -t api-gateway:${BUILD_NUMBER} .
-                                else
-                                    docker build -t api-gateway:${BUILD_NUMBER} .
-                                    echo "Loading api-gateway:${BUILD_NUMBER} into minikube"
-                                    minikube image load api-gateway:${BUILD_NUMBER}
-                                fi
+                            sh '''
+                                docker build -t api-gateway:latest .
+                                docker tag api-gateway:latest api-gateway:${BUILD_NUMBER}
+                                docker save api-gateway:latest | docker exec -i minikube docker load
                             '''
                         }
                     }
@@ -125,18 +54,10 @@ set -eo pipefail
                     steps {
                         echo '🐳 Construyendo imagen Docker de proxy-client...'
                         dir('proxy-client') {
-                            sh '''#!/usr/bin/env bash
-set -eo pipefail
-
-                                if [ -f .use_minikube_docker ]; then
-                                    echo "Using Minikube docker daemon for build"
-                                    eval $(minikube -p minikube docker-env --shell=bash)
-                                    docker build -t proxy-client:${BUILD_NUMBER} .
-                                else
-                                    docker build -t proxy-client:${BUILD_NUMBER} .
-                                    echo "Loading proxy-client:${BUILD_NUMBER} into minikube"
-                                    minikube image load proxy-client:${BUILD_NUMBER}
-                                fi
+                            sh '''
+                                docker build -t proxy-client:latest .
+                                docker tag proxy-client:latest proxy-client:${BUILD_NUMBER}
+                                docker save proxy-client:latest | docker exec -i minikube docker load
                             '''
                         }
                     }
@@ -144,9 +65,7 @@ set -eo pipefail
                 stage('Deploy api-gateway & proxy-client to k8s (if manifests exist)') {
                     steps {
                         echo '☸️ Desplegando api-gateway y proxy-client (si hay manifests)...'
-                        sh '''#!/usr/bin/env bash
-set -eo pipefail
-
+                        sh '''
                             kubectl get namespace ecommerce || kubectl create namespace ecommerce
                             if [ -f k8s/api-gateway-deployment.yaml ]; then
                                 kubectl apply -f k8s/api-gateway-deployment.yaml -n ecommerce
@@ -183,18 +102,10 @@ set -eo pipefail
                         stage('Docker Build shipping-service') {
                             steps {
                                 dir('shipping-service') {
-                                    sh '''#!/usr/bin/env bash
-set -eo pipefail
-
-                                        if [ -f .use_minikube_docker ]; then
-                                            echo "Using Minikube docker daemon for build"
-                                            eval $(minikube -p minikube docker-env --shell=bash)
-                                            docker build -t shipping-service:${BUILD_NUMBER} .
-                                        else
-                                            docker build -t shipping-service:${BUILD_NUMBER} .
-                                            echo "Loading shipping-service:${BUILD_NUMBER} into minikube"
-                                            minikube image load shipping-service:${BUILD_NUMBER}
-                                        fi
+                                    sh '''
+                                        docker build -t shipping-service:latest .
+                                        docker tag shipping-service:latest shipping-service:${BUILD_NUMBER}
+                                        docker save shipping-service:latest | docker exec -i minikube docker load
                                     '''
                                 }
                             }
@@ -213,18 +124,10 @@ set -eo pipefail
                         stage('Docker Build product-service') {
                             steps {
                                 dir('product-service') {
-                                    sh '''#!/usr/bin/env bash
-set -eo pipefail
-
-                                            if [ -f .use_minikube_docker ]; then
-                                                echo "Using Minikube docker daemon for build"
-                                                eval $(minikube -p minikube docker-env --shell=bash)
-                                                docker build -t product-service:${BUILD_NUMBER} .
-                                            else
-                                                docker build -t product-service:${BUILD_NUMBER} .
-                                                echo "Loading product-service:${BUILD_NUMBER} into minikube"
-                                                minikube image load product-service:${BUILD_NUMBER}
-                                            fi
+                                    sh '''
+                                        docker build -t product-service:latest .
+                                        docker tag product-service:latest product-service:${BUILD_NUMBER}
+                                        docker save product-service:latest | docker exec -i minikube docker load
                                     '''
                                 }
                             }
@@ -243,18 +146,10 @@ set -eo pipefail
                         stage('Docker Build payment-service') {
                             steps {
                                 dir('payment-service') {
-                                    sh '''#!/usr/bin/env bash
-set -eo pipefail
-
-                                            if [ -f .use_minikube_docker ]; then
-                                                echo "Using Minikube docker daemon for build"
-                                                eval $(minikube -p minikube docker-env --shell=bash)
-                                                docker build -t payment-service:${BUILD_NUMBER} .
-                                            else
-                                                docker build -t payment-service:${BUILD_NUMBER} .
-                                                echo "Loading payment-service:${BUILD_NUMBER} into minikube"
-                                                minikube image load payment-service:${BUILD_NUMBER}
-                                            fi
+                                    sh '''
+                                        docker build -t payment-service:latest .
+                                        docker tag payment-service:latest payment-service:${BUILD_NUMBER}
+                                        docker save payment-service:latest | docker exec -i minikube docker load
                                     '''
                                 }
                             }
@@ -273,18 +168,10 @@ set -eo pipefail
                         stage('Docker Build favourite-service') {
                             steps {
                                 dir('favourite-service') {
-                                    sh '''#!/usr/bin/env bash
-set -eo pipefail
-
-                                            if [ -f .use_minikube_docker ]; then
-                                                echo "Using Minikube docker daemon for build"
-                                                eval $(minikube -p minikube docker-env --shell=bash)
-                                                docker build -t favourite-service:${BUILD_NUMBER} .
-                                            else
-                                                docker build -t favourite-service:${BUILD_NUMBER} .
-                                                echo "Loading favourite-service:${BUILD_NUMBER} into minikube"
-                                                minikube image load favourite-service:${BUILD_NUMBER}
-                                            fi
+                                    sh '''
+                                        docker build -t favourite-service:latest .
+                                        docker tag favourite-service:latest favourite-service:${BUILD_NUMBER}
+                                        docker save favourite-service:latest | docker exec -i minikube docker load
                                     '''
                                 }
                             }
@@ -303,18 +190,10 @@ set -eo pipefail
                         stage('Docker Build user-service') {
                             steps {
                                 dir('user-service') {
-                                    sh '''#!/usr/bin/env bash
-set -eo pipefail
-
-                                            if [ -f .use_minikube_docker ]; then
-                                                echo "Using Minikube docker daemon for build"
-                                                eval $(minikube -p minikube docker-env --shell=bash)
-                                                docker build -t user-service:${BUILD_NUMBER} .
-                                            else
-                                                docker build -t user-service:${BUILD_NUMBER} .
-                                                echo "Loading user-service:${BUILD_NUMBER} into minikube"
-                                                minikube image load user-service:${BUILD_NUMBER}
-                                            fi
+                                    sh '''
+                                        docker build -t user-service:latest .
+                                        docker tag user-service:latest user-service:${BUILD_NUMBER}
+                                        docker save user-service:latest | docker exec -i minikube docker load
                                     '''
                                 }
                             }
@@ -327,9 +206,7 @@ set -eo pipefail
         stage('📦 Verificar Artefactos') {
             steps {
                 echo '🔍 Verificando JAR files y Docker images...'
-                sh '''#!/usr/bin/env bash
-set -eo pipefail
-
+                sh '''
                     echo "=== JAR Files Generados ==="
                     find . -name "*.jar" -path "*/target/*" -not -path "*original*" | while read jar; do
                         echo "✅ $jar ($(du -h "$jar" | cut -f1))"
@@ -349,9 +226,7 @@ set -eo pipefail
         stage('🚀 Deploy to Kubernetes (Stage)') {
             steps {
                 echo '☸️ Desplegando microservicios en Kubernetes...'
-                sh '''#!/usr/bin/env bash
-set -eo pipefail
-
+                sh '''
                     # Crear namespace si no existe
                     kubectl get namespace ecommerce || kubectl create namespace ecommerce
                     
@@ -383,9 +258,7 @@ set -eo pipefail
         stage('⏳ Esperar Deployments') {
             steps {
                 echo '⏰ Esperando que los pods estén listos...'
-                sh '''#!/usr/bin/env bash
-set -eo pipefail
-
+                sh '''
                     echo "Esperando user-service..."
                     kubectl wait --for=condition=available --timeout=120s deployment/user-service -n ecommerce || true
                     
@@ -417,9 +290,7 @@ set -eo pipefail
                     steps {
                         script {
                             echo '🔍 Verificando user-service en Kubernetes...'
-                            sh '''#!/usr/bin/env bash
-set -eo pipefail
-
+                            sh '''
                                 MINIKUBE_IP=$(minikube ip)
                                 SERVICE_URL="http://${MINIKUBE_IP}:30700"
                                 
@@ -444,9 +315,7 @@ set -eo pipefail
                     steps {
                         script {
                             echo '🔍 Verificando product-service en Kubernetes...'
-                            sh '''#!/usr/bin/env bash
-set -eo pipefail
-
+                            sh '''
                                 MINIKUBE_IP=$(minikube ip)
                                 SERVICE_URL="http://${MINIKUBE_IP}:30500"
                                 
@@ -470,9 +339,7 @@ set -eo pipefail
                     steps {
                         script {
                             echo '🔍 Verificando order-service en Kubernetes...'
-                            sh '''#!/usr/bin/env bash
-set -eo pipefail
-
+                            sh '''
                                 MINIKUBE_IP=$(minikube ip)
                                 SERVICE_URL="http://${MINIKUBE_IP}:30300"
                                 
@@ -496,9 +363,7 @@ set -eo pipefail
                     steps {
                         script {
                             echo '🔍 Verificando payment-service en Kubernetes...'
-                            sh '''#!/usr/bin/env bash
-set -eo pipefail
-
+                            sh '''
                                 MINIKUBE_IP=$(minikube ip)
                                 SERVICE_URL="http://${MINIKUBE_IP}:30400"
                                 
@@ -522,9 +387,7 @@ set -eo pipefail
                     steps {
                         script {
                             echo '🔍 Verificando shipping-service en Kubernetes...'
-                            sh '''#!/usr/bin/env bash
-set -eo pipefail
-
+                            sh '''
                                 MINIKUBE_IP=$(minikube ip)
                                 SERVICE_URL="http://${MINIKUBE_IP}:30600"
                                 
@@ -548,9 +411,7 @@ set -eo pipefail
                     steps {
                         script {
                             echo '🔍 Verificando favourite-service en Kubernetes...'
-                            sh '''#!/usr/bin/env bash
-set -eo pipefail
-
+                            sh '''
                                 MINIKUBE_IP=$(minikube ip)
                                 SERVICE_URL="http://${MINIKUBE_IP}:30800"
                                 
@@ -575,9 +436,7 @@ set -eo pipefail
         stage('📊 Estado Final') {
             steps {
                 echo '📋 Generando reporte del deployment...'
-                sh '''#!/usr/bin/env bash
-set -eo pipefail
-
+                sh '''
                     echo "========================================="
                     echo "    REPORTE DE DEPLOYMENT - STAGE"
                     echo "========================================="
@@ -621,11 +480,9 @@ set -eo pipefail
             echo '   ✓ Desplegados en Kubernetes'
             echo '   ✓ Verificados con health checks'
         }
-            failure {
+        failure {
             echo '❌ Pipeline falló. Revisando estado...'
-            sh '''#!/usr/bin/env bash
-set -eo pipefail
-
+            sh '''
                 echo "Estado de pods en ecommerce namespace:"
                 kubectl get pods -n ecommerce || true
                 
@@ -644,5 +501,4 @@ set -eo pipefail
         }
     }
 }
-
 
