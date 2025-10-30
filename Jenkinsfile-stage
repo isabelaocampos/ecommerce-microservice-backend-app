@@ -16,15 +16,44 @@ pipeline {
             steps {
                 echo '⚙️ Configurando acceso a Kubernetes/Minikube...'
                 sh '''
-                    # Opción 1: Intentar usar minikube update-context para corregir las rutas
-                    minikube update-context || true
+                    # Crear directorio para kubeconfig si no existe
+                    mkdir -p ~/.kube
                     
-                    # Opción 2: Si falla, usar kubectl desde minikube directamente
-                    # Verificar conexión
-                    kubectl version --client || echo "kubectl encontrado"
+                    # Obtener IP de Minikube
+                    MINIKUBE_IP=$(minikube ip 2>/dev/null || echo "127.0.0.1")
                     
-                    # Verificar que podemos conectar con minikube
-                    kubectl get nodes || minikube kubectl -- get nodes
+                    # Obtener puerto de API server desde el contenedor de minikube
+                    # Usamos minikube ssh para obtener los certificados directamente
+                    echo "🔑 Configurando certificados desde Minikube..."
+                    
+                    # Crear kubeconfig usando minikube directamente sin depender del archivo local
+                    cat > ~/.kube/config << EOF
+apiVersion: v1
+clusters:
+- cluster:
+    insecure-skip-tls-verify: true
+    server: https://${MINIKUBE_IP}:8443
+  name: minikube
+contexts:
+- context:
+    cluster: minikube
+    user: minikube
+    namespace: default
+  name: minikube
+current-context: minikube
+kind: Config
+preferences: {}
+users:
+- name: minikube
+  user:
+    client-certificate-data: $(minikube ssh "sudo cat /var/lib/minikube/certs/client.crt" | base64 -w 0)
+    client-key-data: $(minikube ssh "sudo cat /var/lib/minikube/certs/client.key" | base64 -w 0)
+EOF
+                    
+                    # Verificar configuración
+                    echo "✅ Kubeconfig creado"
+                    kubectl version --client
+                    kubectl get nodes || echo "⚠️ Esperando conexión con cluster..."
                 '''
             }
         }
