@@ -8,25 +8,92 @@ pipeline {
     environment {
         JAVA_HOME = '/opt/jdk-11.0.2'
         MAVEN_OPTS = '-Dmaven.test.failure.ignore=true'
-        MINIKUBE_IP = sh(script: 'kubectl config view -o jsonpath=\'{.clusters[0].cluster.server}\' | sed \'s|https://||;s|:.*||\'', returnStdout: true).trim()
         DOCKER_BUILDKIT = '1'
+        NAMESPACE = 'ecommerce'
+        BUILD_TAG = "${BUILD_NUMBER}"
     }
     
     stages {
-        stage('🔍 Checkout') {
+        stage('Checkout') {
             steps {
-                echo '📥 Clonando repositorio...'
+                echo '[INFO] Clonando repositorio...'
                 checkout scm
             }
         }
         
-        stage('🏗️ Build & Test - Fase 1') {
+        // ========================================
+        // FASE 0: INFRAESTRUCTURA (OPCIONAL)
+        // ========================================
+        stage('Infraestructura (Opcional)') {
+            when {
+                expression { 
+                    return fileExists('service-discovery/pom.xml') && 
+                           fileExists('zipkin-server/pom.xml')
+                }
+            }
+            parallel {
+                stage('eureka-server') {
+                    stages {
+                        stage('Build eureka') {
+                            steps {
+                                echo '[BUILD] Construyendo service-discovery (Eureka)...'
+                                dir('service-discovery') {
+                                    sh 'mvn clean package -DskipTests'
+                                }
+                            }
+                        }
+                        stage('Docker Build eureka') {
+                            steps {
+                                echo '[DOCKER] Construyendo imagen de eureka...'
+                                dir('service-discovery') {
+                                    sh """
+                                        docker build -t eureka-server:${BUILD_TAG} .
+                                        docker tag eureka-server:${BUILD_TAG} eureka-server:latest
+                                        docker save eureka-server:${BUILD_TAG} | minikube ssh --native-ssh=false "docker load"
+                                    """
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                stage('zipkin-server') {
+                    stages {
+                        stage('Build zipkin') {
+                            steps {
+                                echo '[BUILD] Construyendo zipkin-server...'
+                                dir('zipkin-server') {
+                                    sh 'mvn clean package -DskipTests'
+                                }
+                            }
+                        }
+                        stage('Docker Build zipkin') {
+                            steps {
+                                echo '[DOCKER] Construyendo imagen de zipkin...'
+                                dir('zipkin-server') {
+                                    sh """
+                                        docker build -t zipkin-server:${BUILD_TAG} .
+                                        docker tag zipkin-server:${BUILD_TAG} zipkin-server:latest
+                                        docker save zipkin-server:${BUILD_TAG} | minikube ssh --native-ssh=false "docker load"
+                                    """
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // ========================================
+        // FASE 1: SERVICIOS CORE (User + Product)
+        // ========================================
+        stage('Build & Test - CORE Services') {
             parallel {
                 stage('user-service') {
                     stages {
                         stage('Build user-service') {
                             steps {
-                                echo '🔨 Construyendo user-service...'
+                                echo '[BUILD] Construyendo user-service...'
                                 dir('user-service') {
                                     sh 'mvn clean package -DskipTests'
                                 }
@@ -34,7 +101,7 @@ pipeline {
                         }
                         stage('Test user-service') {
                             steps {
-                                echo '🧪 Ejecutando tests de user-service...'
+                                echo '[TEST] Ejecutando tests de user-service...'
                                 dir('user-service') {
                                     sh 'mvn test || true'
                                 }
@@ -42,16 +109,13 @@ pipeline {
                         }
                         stage('Docker Build user-service') {
                             steps {
-                                echo '🐳 Construyendo imagen Docker de user-service...'
+                                echo '[DOCKER] Construyendo imagen de user-service...'
                                 dir('user-service') {
-                                    sh '''
-                                        # Build image
-                                        docker build -t user-service:latest .
-                                        docker tag user-service:latest user-service:${BUILD_NUMBER}
-                                        
-                                        # Load into minikube via SSH
-                                        docker save user-service:latest | minikube ssh --native-ssh=false "docker load"
-                                    '''
+                                    sh """
+                                        docker build -t user-service:${BUILD_TAG} .
+                                        docker tag user-service:${BUILD_TAG} user-service:latest
+                                        docker save user-service:${BUILD_TAG} | minikube ssh --native-ssh=false "docker load"
+                                    """
                                 }
                             }
                         }
@@ -62,7 +126,7 @@ pipeline {
                     stages {
                         stage('Build product-service') {
                             steps {
-                                echo '🔨 Construyendo product-service...'
+                                echo '[BUILD] Construyendo product-service...'
                                 dir('product-service') {
                                     sh 'mvn clean package -DskipTests'
                                 }
@@ -70,7 +134,7 @@ pipeline {
                         }
                         stage('Test product-service') {
                             steps {
-                                echo '🧪 Ejecutando tests de product-service...'
+                                echo '[TEST] Ejecutando tests de product-service...'
                                 dir('product-service') {
                                     sh 'mvn test || true'
                                 }
@@ -78,13 +142,13 @@ pipeline {
                         }
                         stage('Docker Build product-service') {
                             steps {
-                                echo '🐳 Construyendo imagen Docker de product-service...'
+                                echo '[DOCKER] Construyendo imagen de product-service...'
                                 dir('product-service') {
-                                    sh '''
-                                        docker build -t product-service:latest .
-                                        docker tag product-service:latest product-service:${BUILD_NUMBER}
-                                        docker save product-service:latest | minikube ssh --native-ssh=false "docker load"
-                                    '''
+                                    sh """
+                                        docker build -t product-service:${BUILD_TAG} .
+                                        docker tag product-service:${BUILD_TAG} product-service:latest
+                                        docker save product-service:${BUILD_TAG} | minikube ssh --native-ssh=false "docker load"
+                                    """
                                 }
                             }
                         }
@@ -93,13 +157,16 @@ pipeline {
             }
         }
         
-        stage('🏗️ Build & Test - Fase 2') {
+        // ========================================
+        // FASE 2: SERVICIOS COMPLEMENTARIOS
+        // ========================================
+        stage('Build & Test - COMPLEMENTARY Services') {
             parallel {
                 stage('favourite-service') {
                     stages {
                         stage('Build favourite-service') {
                             steps {
-                                echo '🔨 Construyendo favourite-service...'
+                                echo '[BUILD] Construyendo favourite-service...'
                                 dir('favourite-service') {
                                     sh 'mvn clean package -DskipTests'
                                 }
@@ -107,7 +174,7 @@ pipeline {
                         }
                         stage('Test favourite-service') {
                             steps {
-                                echo '🧪 Ejecutando tests de favourite-service...'
+                                echo '[TEST] Ejecutando tests de favourite-service...'
                                 dir('favourite-service') {
                                     sh 'mvn test || true'
                                 }
@@ -115,13 +182,13 @@ pipeline {
                         }
                         stage('Docker Build favourite-service') {
                             steps {
-                                echo '🐳 Construyendo imagen Docker de favourite-service...'
+                                echo '[DOCKER] Construyendo imagen de favourite-service...'
                                 dir('favourite-service') {
-                                    sh '''
-                                        docker build -t favourite-service:latest .
-                                        docker tag favourite-service:latest favourite-service:${BUILD_NUMBER}
-                                        docker save favourite-service:latest | minikube ssh --native-ssh=false "docker load"
-                                    '''
+                                    sh """
+                                        docker build -t favourite-service:${BUILD_TAG} .
+                                        docker tag favourite-service:${BUILD_TAG} favourite-service:latest
+                                        docker save favourite-service:${BUILD_TAG} | minikube ssh --native-ssh=false "docker load"
+                                    """
                                 }
                             }
                         }
@@ -132,7 +199,7 @@ pipeline {
                     stages {
                         stage('Build order-service') {
                             steps {
-                                echo '🔨 Construyendo order-service...'
+                                echo '[BUILD] Construyendo order-service...'
                                 dir('order-service') {
                                     sh 'mvn clean package -DskipTests'
                                 }
@@ -140,7 +207,7 @@ pipeline {
                         }
                         stage('Test order-service') {
                             steps {
-                                echo '🧪 Ejecutando tests de order-service...'
+                                echo '[TEST] Ejecutando tests de order-service...'
                                 dir('order-service') {
                                     sh 'mvn test || true'
                                 }
@@ -148,13 +215,13 @@ pipeline {
                         }
                         stage('Docker Build order-service') {
                             steps {
-                                echo '🐳 Construyendo imagen Docker de order-service...'
+                                echo '[DOCKER] Construyendo imagen de order-service...'
                                 dir('order-service') {
-                                    sh '''
-                                        docker build -t order-service:latest .
-                                        docker tag order-service:latest order-service:${BUILD_NUMBER}
-                                        docker save order-service:latest | minikube ssh --native-ssh=false "docker load"
-                                    '''
+                                    sh """
+                                        docker build -t order-service:${BUILD_TAG} .
+                                        docker tag order-service:${BUILD_TAG} order-service:latest
+                                        docker save order-service:${BUILD_TAG} | minikube ssh --native-ssh=false "docker load"
+                                    """
                                 }
                             }
                         }
@@ -163,13 +230,16 @@ pipeline {
             }
         }
         
-        stage('🏗️ Build & Test - Fase 3') {
+        // ========================================
+        // FASE 3: SERVICIOS DE TRANSACCION
+        // ========================================
+        stage('Build & Test - TRANSACTION Services') {
             parallel {
                 stage('payment-service') {
                     stages {
                         stage('Build payment-service') {
                             steps {
-                                echo '🔨 Construyendo payment-service...'
+                                echo '[BUILD] Construyendo payment-service...'
                                 dir('payment-service') {
                                     sh 'mvn clean package -DskipTests'
                                 }
@@ -177,7 +247,7 @@ pipeline {
                         }
                         stage('Test payment-service') {
                             steps {
-                                echo '🧪 Ejecutando tests de payment-service...'
+                                echo '[TEST] Ejecutando tests de payment-service...'
                                 dir('payment-service') {
                                     sh 'mvn test || true'
                                 }
@@ -185,13 +255,13 @@ pipeline {
                         }
                         stage('Docker Build payment-service') {
                             steps {
-                                echo '🐳 Construyendo imagen Docker de payment-service...'
+                                echo '[DOCKER] Construyendo imagen de payment-service...'
                                 dir('payment-service') {
-                                    sh '''
-                                        docker build -t payment-service:latest .
-                                        docker tag payment-service:latest payment-service:${BUILD_NUMBER}
-                                        docker save payment-service:latest | minikube ssh --native-ssh=false "docker load"
-                                    '''
+                                    sh """
+                                        docker build -t payment-service:${BUILD_TAG} .
+                                        docker tag payment-service:${BUILD_TAG} payment-service:latest
+                                        docker save payment-service:${BUILD_TAG} | minikube ssh --native-ssh=false "docker load"
+                                    """
                                 }
                             }
                         }
@@ -202,7 +272,7 @@ pipeline {
                     stages {
                         stage('Build shipping-service') {
                             steps {
-                                echo '🔨 Construyendo shipping-service...'
+                                echo '[BUILD] Construyendo shipping-service...'
                                 dir('shipping-service') {
                                     sh 'mvn clean package -DskipTests'
                                 }
@@ -210,7 +280,7 @@ pipeline {
                         }
                         stage('Test shipping-service') {
                             steps {
-                                echo '🧪 Ejecutando tests de shipping-service...'
+                                echo '[TEST] Ejecutando tests de shipping-service...'
                                 dir('shipping-service') {
                                     sh 'mvn test || true'
                                 }
@@ -218,13 +288,13 @@ pipeline {
                         }
                         stage('Docker Build shipping-service') {
                             steps {
-                                echo '🐳 Construyendo imagen Docker de shipping-service...'
+                                echo '[DOCKER] Construyendo imagen de shipping-service...'
                                 dir('shipping-service') {
-                                    sh '''
-                                        docker build -t shipping-service:latest .
-                                        docker tag shipping-service:latest shipping-service:${BUILD_NUMBER}
-                                        docker save shipping-service:latest | minikube ssh --native-ssh=false "docker load"
-                                    '''
+                                    sh """
+                                        docker build -t shipping-service:${BUILD_TAG} .
+                                        docker tag shipping-service:${BUILD_TAG} shipping-service:latest
+                                        docker save shipping-service:${BUILD_TAG} | minikube ssh --native-ssh=false "docker load"
+                                    """
                                 }
                             }
                         }
@@ -233,229 +303,271 @@ pipeline {
             }
         }
         
-        stage('📦 Verificar Artefactos') {
+        // ========================================
+        // VERIFICACION DE ARTEFACTOS
+        // ========================================
+        stage('Verificar Artefactos') {
             steps {
-                echo '🔍 Verificando JAR files y Docker images...'
+                echo '[CHECK] Verificando JAR files y Docker images...'
                 sh '''
+                    echo "========================================="
+                    echo "    VERIFICACION DE ARTEFACTOS"
+                    echo "========================================="
+                    echo ""
+                    
                     echo "=== JAR Files Generados ==="
                     find . -name "*.jar" -path "*/target/*" -not -path "*original*" | while read jar; do
-                        echo "✅ $jar ($(du -h "$jar" | cut -f1))"
+                        SIZE=$(du -h "$jar" | cut -f1)
+                        echo "[OK] $(basename $(dirname $(dirname "$jar"))): $SIZE"
                     done
                     
                     echo ""
-                    echo "=== Docker Images en Host ==="
-                    docker images | grep -E "(user-service|product-service|favourite-service|order-service|payment-service|shipping-service)" || true
-                    
-                    echo ""
                     echo "=== Docker Images en Minikube ==="
-                    minikube image ls | grep -E "(user-service|product-service|favourite-service|order-service|payment-service|shipping-service)" || true
-                '''
-            }
-        }
-        
-        stage('🚀 Deploy to Kubernetes (Stage)') {
-            steps {
-                echo '☸️ Desplegando microservicios en Kubernetes...'
-                sh '''
-                    # Crear namespace si no existe
-                    kubectl get namespace ecommerce || kubectl create namespace ecommerce
-                    
-                    # Aplicar deployments
-                    echo "📌 Desplegando user-service..."
-                    kubectl apply -f k8s/user-service-deployment.yaml
-                    
-                    echo "📌 Desplegando product-service..."
-                    kubectl apply -f k8s/product-service-deployment.yaml
-                    
-                    echo "📌 Desplegando favourite-service..."
-                    kubectl apply -f k8s/favourite-service-deployment.yaml
-                    
-                    echo "📌 Desplegando order-service..."
-                    kubectl apply -f k8s/order-service-deployment.yaml
-                    
-                    echo "📌 Desplegando payment-service..."
-                    kubectl apply -f k8s/payment-service-deployment.yaml
-                    
-                    echo "📌 Desplegando shipping-service..."
-                    kubectl apply -f k8s/shipping-service-deployment.yaml
+                    minikube ssh "docker images" | grep -E "(user-service|product-service|favourite-service|order-service|payment-service|shipping-service|eureka|zipkin)" | head -20
                     
                     echo ""
-                    echo "✅ Deployments aplicados"
+                    echo "========================================="
                 '''
             }
         }
         
-        stage('⏳ Esperar Deployments') {
+        // ========================================
+        // DEPLOYMENT A KUBERNETES
+        // ========================================
+        stage('Pre-Deploy: Setup Namespace') {
             steps {
-                echo '⏰ Esperando que los pods estén listos...'
+                echo '[SETUP] Configurando namespace y recursos base...'
                 sh '''
-                    echo "Esperando user-service..."
-                    kubectl wait --for=condition=available --timeout=120s deployment/user-service -n ecommerce || true
+                    # Crear namespace
+                    kubectl get namespace ${NAMESPACE} || kubectl create namespace ${NAMESPACE}
                     
-                    echo "Esperando product-service..."
-                    kubectl wait --for=condition=available --timeout=120s deployment/product-service -n ecommerce || true
+                    # Etiquetar namespace
+                    kubectl label namespace ${NAMESPACE} environment=stage --overwrite
                     
-                    echo "Esperando favourite-service..."
-                    kubectl wait --for=condition=available --timeout=120s deployment/favourite-service -n ecommerce || true
+                    echo "[OK] Namespace ${NAMESPACE} listo"
+                '''
+            }
+        }
+        
+        stage('Deploy to Kubernetes - 6 Microservicios') {
+            steps {
+                echo '[DEPLOY] Desplegando los 6 microservicios principales...'
+                sh '''
+                    deploy_service() {
+                        local service=$1
+                        echo "[DEPLOY] Desplegando $service..."
+                        
+                        if [ -f "k8s/${service}-deployment.yaml" ]; then
+                            kubectl apply -f k8s/${service}-deployment.yaml -n ${NAMESPACE}
+                            echo "[OK] $service desplegado"
+                        else
+                            echo "[WARN] No se encuentra k8s/${service}-deployment.yaml"
+                        fi
+                    }
                     
-                    echo "Esperando order-service..."
-                    kubectl wait --for=condition=available --timeout=120s deployment/order-service -n ecommerce || true
+                    echo "========================================="
+                    echo "  DESPLEGANDO 6 MICROSERVICIOS"
+                    echo "========================================="
+                    echo ""
                     
-                    echo "Esperando payment-service..."
-                    kubectl wait --for=condition=available --timeout=120s deployment/payment-service -n ecommerce || true
+                    # Fase 1: Servicios base
+                    echo "[FASE 1] Servicios base..."
+                    deploy_service "user-service"
+                    deploy_service "product-service"
+                    sleep 5
                     
-                    echo "Esperando shipping-service..."
-                    kubectl wait --for=condition=available --timeout=120s deployment/shipping-service -n ecommerce || true
+                    # Fase 2: Servicios dependientes
+                    echo ""
+                    echo "[FASE 2] Servicios complementarios..."
+                    deploy_service "favourite-service"
+                    deploy_service "order-service"
+                    sleep 5
+                    
+                    # Fase 3: Servicios de transacción
+                    echo ""
+                    echo "[FASE 3] Servicios de transacción..."
+                    deploy_service "payment-service"
+                    deploy_service "shipping-service"
                     
                     echo ""
-                    echo "Estado de los pods:"
-                    kubectl get pods -n ecommerce
+                    echo "[OK] Todos los microservicios desplegados"
+                    echo "========================================="
                 '''
             }
         }
         
-        stage('🧪 Integration Tests on K8s') {
+        stage('Esperar Deployments Ready') {
+            steps {
+                echo '[WAIT] Esperando que los 6 microservicios estén listos...'
+                sh '''
+                    wait_deployment() {
+                        local service=$1
+                        local timeout=300
+                        
+                        echo "[WAIT] Esperando $service (timeout: ${timeout}s)..."
+                        
+                        if kubectl wait --for=condition=available --timeout=${timeout}s \
+                           deployment/$service -n ${NAMESPACE} 2>/dev/null; then
+                            echo "[OK] $service disponible"
+                            return 0
+                        else
+                            echo "[WARN] $service no alcanzó estado disponible"
+                            kubectl get pods -n ${NAMESPACE} -l app=$service
+                            return 1
+                        fi
+                    }
+                    
+                    echo "========================================="
+                    echo "  ESPERANDO DEPLOYMENTS"
+                    echo "========================================="
+                    
+                    SERVICES="user-service product-service favourite-service order-service payment-service shipping-service"
+                    FAILED=""
+                    
+                    for service in $SERVICES; do
+                        if ! wait_deployment "$service"; then
+                            FAILED="$FAILED $service"
+                        fi
+                        echo ""
+                    done
+                    
+                    if [ ! -z "$FAILED" ]; then
+                        echo "[ERROR] Los siguientes servicios fallaron:$FAILED"
+                        echo "[INFO] Continuando para diagnóstico..."
+                    fi
+                    
+                    echo "========================================="
+                    kubectl get pods -n ${NAMESPACE} -o wide
+                '''
+            }
+        }
+        
+        // ========================================
+        // TESTS DE INTEGRACION EN K8S
+        // ========================================
+        stage('Integration Tests - Health Checks') {
             parallel {
-                stage('Test user-service en K8s') {
+                stage('Health: user-service') {
                     steps {
                         script {
-                            echo '🔍 Verificando user-service en Kubernetes...'
                             sh '''
-                                MINIKUBE_IP=$(minikube ip)
-                                SERVICE_URL="http://${MINIKUBE_IP}:30700"
+                                SERVICE_URL="http://$(minikube ip):30700"
+                                echo "[TEST] user-service: ${SERVICE_URL}/actuator/health"
                                 
-                                echo "Testeando: ${SERVICE_URL}/actuator/health"
-                                
-                                # Esperar a que el servicio responda
-                                for i in {1..30}; do
-                                    if curl -s -f "${SERVICE_URL}/actuator/health" > /dev/null 2>&1; then
-                                        echo "✅ user-service está respondiendo"
-                                        curl -s "${SERVICE_URL}/actuator/health" | grep -q "UP" && echo "✅ Health check OK"
-                                        break
+                                for i in {1..40}; do
+                                    if curl -sf "${SERVICE_URL}/actuator/health" | grep -q "UP"; then
+                                        echo "[OK] user-service: UP"
+                                        exit 0
                                     fi
-                                    echo "Intento $i/30 - Esperando user-service..."
-                                    sleep 5
+                                    sleep 3
                                 done
+                                echo "[FAIL] user-service no responde"
+                                exit 1
                             '''
                         }
                     }
                 }
                 
-                stage('Test product-service en K8s') {
+                stage('Health: product-service') {
                     steps {
                         script {
-                            echo '🔍 Verificando product-service en Kubernetes...'
                             sh '''
-                                MINIKUBE_IP=$(minikube ip)
-                                SERVICE_URL="http://${MINIKUBE_IP}:30500"
+                                SERVICE_URL="http://$(minikube ip):30500"
+                                echo "[TEST] product-service: ${SERVICE_URL}/actuator/health"
                                 
-                                echo "Testeando: ${SERVICE_URL}/actuator/health"
-                                
-                                for i in {1..30}; do
-                                    if curl -s -f "${SERVICE_URL}/actuator/health" > /dev/null 2>&1; then
-                                        echo "✅ product-service está respondiendo"
-                                        curl -s "${SERVICE_URL}/actuator/health" | grep -q "UP" && echo "✅ Health check OK"
-                                        break
+                                for i in {1..40}; do
+                                    if curl -sf "${SERVICE_URL}/actuator/health" | grep -q "UP"; then
+                                        echo "[OK] product-service: UP"
+                                        exit 0
                                     fi
-                                    echo "Intento $i/30 - Esperando product-service..."
-                                    sleep 5
+                                    sleep 3
                                 done
+                                echo "[FAIL] product-service no responde"
+                                exit 1
                             '''
                         }
                     }
                 }
                 
-                stage('Test order-service en K8s') {
+                stage('Health: favourite-service') {
                     steps {
                         script {
-                            echo '🔍 Verificando order-service en Kubernetes...'
                             sh '''
-                                MINIKUBE_IP=$(minikube ip)
-                                SERVICE_URL="http://${MINIKUBE_IP}:30300"
+                                SERVICE_URL="http://$(minikube ip):30800"
+                                echo "[TEST] favourite-service: ${SERVICE_URL}/actuator/health"
                                 
-                                echo "Testeando: ${SERVICE_URL}/actuator/health"
-                                
-                                for i in {1..30}; do
-                                    if curl -s -f "${SERVICE_URL}/actuator/health" > /dev/null 2>&1; then
-                                        echo "✅ order-service está respondiendo"
-                                        curl -s "${SERVICE_URL}/actuator/health" | grep -q "UP" && echo "✅ Health check OK"
-                                        break
+                                for i in {1..40}; do
+                                    if curl -sf "${SERVICE_URL}/actuator/health" | grep -q "UP"; then
+                                        echo "[OK] favourite-service: UP"
+                                        exit 0
                                     fi
-                                    echo "Intento $i/30 - Esperando order-service..."
-                                    sleep 5
+                                    sleep 3
                                 done
+                                echo "[FAIL] favourite-service no responde"
+                                exit 1
                             '''
                         }
                     }
                 }
                 
-                stage('Test payment-service en K8s') {
+                stage('Health: order-service') {
                     steps {
                         script {
-                            echo '🔍 Verificando payment-service en Kubernetes...'
                             sh '''
-                                MINIKUBE_IP=$(minikube ip)
-                                SERVICE_URL="http://${MINIKUBE_IP}:30400"
+                                SERVICE_URL="http://$(minikube ip):30300"
+                                echo "[TEST] order-service: ${SERVICE_URL}/actuator/health"
                                 
-                                echo "Testeando: ${SERVICE_URL}/actuator/health"
-                                
-                                for i in {1..30}; do
-                                    if curl -s -f "${SERVICE_URL}/actuator/health" > /dev/null 2>&1; then
-                                        echo "✅ payment-service está respondiendo"
-                                        curl -s "${SERVICE_URL}/actuator/health" | grep -q "UP" && echo "✅ Health check OK"
-                                        break
+                                for i in {1..40}; do
+                                    if curl -sf "${SERVICE_URL}/actuator/health" | grep -q "UP"; then
+                                        echo "[OK] order-service: UP"
+                                        exit 0
                                     fi
-                                    echo "Intento $i/30 - Esperando payment-service..."
-                                    sleep 5
+                                    sleep 3
                                 done
+                                echo "[FAIL] order-service no responde"
+                                exit 1
                             '''
                         }
                     }
                 }
                 
-                stage('Test shipping-service en K8s') {
+                stage('Health: payment-service') {
                     steps {
                         script {
-                            echo '🔍 Verificando shipping-service en Kubernetes...'
                             sh '''
-                                MINIKUBE_IP=$(minikube ip)
-                                SERVICE_URL="http://${MINIKUBE_IP}:30600"
+                                SERVICE_URL="http://$(minikube ip):30400"
+                                echo "[TEST] payment-service: ${SERVICE_URL}/actuator/health"
                                 
-                                echo "Testeando: ${SERVICE_URL}/actuator/health"
-                                
-                                for i in {1..30}; do
-                                    if curl -s -f "${SERVICE_URL}/actuator/health" > /dev/null 2>&1; then
-                                        echo "✅ shipping-service está respondiendo"
-                                        curl -s "${SERVICE_URL}/actuator/health" | grep -q "UP" && echo "✅ Health check OK"
-                                        break
+                                for i in {1..40}; do
+                                    if curl -sf "${SERVICE_URL}/actuator/health" | grep -q "UP"; then
+                                        echo "[OK] payment-service: UP"
+                                        exit 0
                                     fi
-                                    echo "Intento $i/30 - Esperando shipping-service..."
-                                    sleep 5
+                                    sleep 3
                                 done
+                                echo "[FAIL] payment-service no responde"
+                                exit 1
                             '''
                         }
                     }
                 }
                 
-                stage('Test favourite-service en K8s') {
+                stage('Health: shipping-service') {
                     steps {
                         script {
-                            echo '🔍 Verificando favourite-service en Kubernetes...'
                             sh '''
-                                MINIKUBE_IP=$(minikube ip)
-                                SERVICE_URL="http://${MINIKUBE_IP}:30800"
+                                SERVICE_URL="http://$(minikube ip):30600"
+                                echo "[TEST] shipping-service: ${SERVICE_URL}/actuator/health"
                                 
-                                echo "Testeando: ${SERVICE_URL}/actuator/health"
-                                
-                                for i in {1..30}; do
-                                    if curl -s -f "${SERVICE_URL}/actuator/health" > /dev/null 2>&1; then
-                                        echo "✅ favourite-service está respondiendo"
-                                        curl -s "${SERVICE_URL}/actuator/health" | grep -q "UP" && echo "✅ Health check OK"
-                                        break
+                                for i in {1..40}; do
+                                    if curl -sf "${SERVICE_URL}/actuator/health" | grep -q "UP"; then
+                                        echo "[OK] shipping-service: UP"
+                                        exit 0
                                     fi
-                                    echo "Intento $i/30 - Esperando favourite-service..."
-                                    sleep 5
+                                    sleep 3
                                 done
+                                echo "[FAIL] shipping-service no responde"
+                                exit 1
                             '''
                         }
                     }
@@ -463,37 +575,108 @@ pipeline {
             }
         }
         
-        stage('📊 Estado Final') {
+        stage('Service Connectivity Tests') {
             steps {
-                echo '📋 Generando reporte del deployment...'
+                echo '[TEST] Verificando conectividad entre los 6 microservicios...'
                 sh '''
                     echo "========================================="
-                    echo "    REPORTE DE DEPLOYMENT - STAGE"
+                    echo "  PRUEBAS DE CONECTIVIDAD INTER-SERVICIOS"
                     echo "========================================="
                     echo ""
                     
-                    echo "📦 Deployments:"
-                    kubectl get deployments -n ecommerce
+                    test_connectivity() {
+                        local from=$1
+                        local to=$2
+                        local port=$3
+                        
+                        echo -n "[TEST] $from -> $to:$port ... "
+                        
+                        if kubectl exec -n ${NAMESPACE} deployment/$from -- \
+                           wget -qO- --timeout=5 http://$to:$port/actuator/health >/dev/null 2>&1; then
+                            echo "[OK]"
+                            return 0
+                        else
+                            echo "[FAIL]"
+                            return 1
+                        fi
+                    }
+                    
+                    # Basado en el diagrama proporcionado
+                    echo "=== Tests de conectividad según arquitectura ==="
                     echo ""
                     
-                    echo "🎯 Services:"
-                    kubectl get services -n ecommerce
-                    echo ""
+                    # User -> Favourite
+                    test_connectivity "user-service" "favourite-service" "8800"
                     
-                    echo "🐳 Pods:"
-                    kubectl get pods -n ecommerce
-                    echo ""
+                    # Product -> Order
+                    test_connectivity "product-service" "order-service" "8300"
                     
-                    echo "📡 Endpoints de los servicios:"
+                    # Order -> Payment
+                    test_connectivity "order-service" "payment-service" "8400"
+                    
+                    # Order -> Shipping
+                    test_connectivity "order-service" "shipping-service" "8600"
+                    
+                    # Payment -> Order (bidireccional)
+                    test_connectivity "payment-service" "order-service" "8300"
+                    
+                    # Shipping -> Order (bidireccional)
+                    test_connectivity "shipping-service" "order-service" "8300"
+                    
+                    echo ""
+                    echo "========================================="
+                '''
+            }
+        }
+        
+        // ========================================
+        // REPORTE FINAL
+        // ========================================
+        stage('Reporte Final - Stage Environment') {
+            steps {
+                echo '[REPORT] Generando reporte completo del deployment...'
+                sh '''
                     MINIKUBE_IP=$(minikube ip)
-                    echo "  user-service:      http://${MINIKUBE_IP}:30700"
-                    echo "  product-service:   http://${MINIKUBE_IP}:30500"
-                    echo "  favourite-service: http://${MINIKUBE_IP}:30800"
-                    echo "  order-service:     http://${MINIKUBE_IP}:30300"
-                    echo "  payment-service:   http://${MINIKUBE_IP}:30400"
-                    echo "  shipping-service:  http://${MINIKUBE_IP}:30600"
-                    echo ""
                     
+                    cat << EOF
+========================================
+    REPORTE DEPLOYMENT - STAGE
+    Build: ${BUILD_TAG}
+    Fecha: $(date '+%Y-%m-%d %H:%M:%S')
+    Namespace: ${NAMESPACE}
+========================================
+
+=== MICROSERVICIOS DESPLEGADOS (6) ===
+1. user-service      -> http://${MINIKUBE_IP}:30700
+2. product-service   -> http://${MINIKUBE_IP}:30500
+3. favourite-service -> http://${MINIKUBE_IP}:30800
+4. order-service     -> http://${MINIKUBE_IP}:30300
+5. payment-service   -> http://${MINIKUBE_IP}:30400
+6. shipping-service  -> http://${MINIKUBE_IP}:30600
+
+=== DEPLOYMENTS ===
+EOF
+                    kubectl get deployments -n ${NAMESPACE} -o wide
+                    
+                    echo ""
+                    echo "=== SERVICES ==="
+                    kubectl get services -n ${NAMESPACE}
+                    
+                    echo ""
+                    echo "=== PODS ==="
+                    kubectl get pods -n ${NAMESPACE} -o wide
+                    
+                    echo ""
+                    echo "=== ESTADO DE SALUD ==="
+                    for port in 30700 30500 30800 30300 30400 30600; do
+                        SERVICE=$(kubectl get svc -n ${NAMESPACE} -o json | jq -r ".items[] | select(.spec.ports[0].nodePort==$port) | .metadata.name")
+                        STATUS=$(curl -sf http://${MINIKUBE_IP}:${port}/actuator/health | jq -r '.status' 2>/dev/null || echo "N/A")
+                        echo "  $SERVICE (port $port): $STATUS"
+                    done
+                    
+                    echo ""
+                    echo "========================================="
+                    echo "  DEPLOYMENT COMPLETADO"
                     echo "========================================="
                 '''
             }
@@ -502,35 +685,76 @@ pipeline {
     
     post {
         success {
-            echo '✅ ¡Pipeline completado exitosamente!'
-            echo '📋 Todos los microservicios fueron:'
-            echo '   ✓ Compilados'
-            echo '   ✓ Testeados'
-            echo '   ✓ Construidos como Docker images'
-            echo '   ✓ Desplegados en Kubernetes'
-            echo '   ✓ Verificados con health checks'
+            echo '========================================'
+            echo '   PIPELINE STAGE: EXITOSO'
+            echo '========================================'
+            echo ''
+            echo 'Los 6 microservicios fueron desplegados:'
+            echo '  [OK] user-service'
+            echo '  [OK] product-service'
+            echo '  [OK] favourite-service'
+            echo '  [OK] order-service'
+            echo '  [OK] payment-service'
+            echo '  [OK] shipping-service'
+            echo ''
+            echo 'Procesos completados:'
+            echo '  - Build con Maven'
+            echo '  - Tests unitarios'
+            echo '  - Construccion de imagenes Docker'
+            echo '  - Deployment en Kubernetes'
+            echo '  - Health checks'
+            echo '  - Tests de conectividad'
+            echo ''
+            echo 'Environment: STAGE'
+            echo '========================================'
         }
+        
         failure {
-            echo '❌ Pipeline falló. Revisando estado...'
+            echo '[ERROR] Pipeline STAGE fallo'
             sh '''
-                echo "Estado de pods en ecommerce namespace:"
-                kubectl get pods -n ecommerce || true
+                echo "========================================="
+                echo "    DIAGNOSTICO DE FALLO"
+                echo "========================================="
                 
                 echo ""
-                echo "Logs de pods con problemas:"
-                kubectl get pods -n ecommerce -o json | jq -r '.items[] | select(.status.phase != "Running") | .metadata.name' | while read pod; do
-                    echo "=== Logs de $pod ==="
-                    kubectl logs $pod -n ecommerce --tail=50 || true
+                echo "=== Pods con problemas ==="
+                kubectl get pods -n ${NAMESPACE} --field-selector=status.phase!=Running
+                
+                echo ""
+                echo "=== Eventos recientes ==="
+                kubectl get events -n ${NAMESPACE} --sort-by='.lastTimestamp' | tail -30
+                
+                echo ""
+                echo "=== Logs de pods fallidos ==="
+                for pod in $(kubectl get pods -n ${NAMESPACE} -o json | jq -r '.items[] | select(.status.phase!="Running") | .metadata.name'); do
+                    echo "--- $pod ---"
+                    kubectl logs $pod -n ${NAMESPACE} --tail=50 2>/dev/null || echo "No logs disponibles"
                 done
+                
+                echo ""
+                echo "========================================="
             '''
         }
+        
         always {
-            echo '🏁 Pipeline finalizado'
-            // Archivar resultados de tests
+            echo '[CLEANUP] Archivando resultados...'
+            
+            // Archivar test results
             junit allowEmptyResults: true, testResults: '**/target/surefire-reports/*.xml'
+            
+            // Generar y archivar estado de K8s
+            sh '''
+                mkdir -p pipeline-reports
+                
+                kubectl get all -n ${NAMESPACE} -o wide > pipeline-reports/k8s-resources.txt 2>&1 || true
+                kubectl describe deployments -n ${NAMESPACE} > pipeline-reports/deployments-detail.txt 2>&1 || true
+                kubectl describe pods -n ${NAMESPACE} > pipeline-reports/pods-detail.txt 2>&1 || true
+                kubectl get events -n ${NAMESPACE} --sort-by='.lastTimestamp' > pipeline-reports/events.txt 2>&1 || true
+                
+                echo "[INFO] Reportes guardados en pipeline-reports/"
+            '''
+            
+            archiveArtifacts artifacts: 'pipeline-reports/*.txt', allowEmptyArchive: true
         }
     }
 }
-
-
-
