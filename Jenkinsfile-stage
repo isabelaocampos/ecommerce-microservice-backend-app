@@ -24,9 +24,10 @@ pipeline {
             steps {
                 echo '🔎 Verificando acceso a Docker y estado de Minikube...'
                 sh '''#!/usr/bin/env bash
-set -eo pipefail
+                set -eo pipefail
 
-echo "Checking /var/run/docker.sock..."
+                echo "Checking /var/run/docker.sock..."
+                rm -f .use_minikube_docker || true
                     if [ ! -S /var/run/docker.sock ]; then
                         echo "❌ Docker socket not found at /var/run/docker.sock"
                         echo "Make sure the Jenkins agent/container mounts /var/run/docker.sock from the host."
@@ -36,7 +37,7 @@ echo "Checking /var/run/docker.sock..."
                     ls -l /var/run/docker.sock || true
 
                     echo "Trying 'docker info' to validate access..."
-                    if docker info >/dev/null 2>&1; then
+                        if docker info >/dev/null 2>&1; then
                         echo "✅ Docker daemon is accessible"
                     else
                         echo "⚠️ Docker daemon not accessible (permission denied or not running)"
@@ -52,8 +53,14 @@ echo "Checking /var/run/docker.sock..."
                             fi
                         else
                             echo "You are not root in the agent; cannot change socket permissions."
-                            echo "Please start the Jenkins agent/container with the docker socket mounted and adjusted ownership (or run the agent as root)."
-                            exit 1
+                            # Try to fall back to building inside Minikube's docker daemon if minikube is available and running
+                            if command -v minikube >/dev/null 2>&1 && minikube status >/dev/null 2>&1 && minikube status | grep -q "host: Running"; then
+                                echo "⚠️ Docker socket not accessible, but Minikube is running. Will build images using Minikube's docker daemon as a fallback."
+                                touch .use_minikube_docker
+                            else
+                                echo "Please start the Jenkins agent/container with the docker socket mounted and adjusted ownership (or run the agent as root)."
+                                exit 1
+                            fi
                         fi
                     fi
 
@@ -93,9 +100,15 @@ echo "Checking /var/run/docker.sock..."
                             sh '''#!/usr/bin/env bash
 set -eo pipefail
 
-                                docker build -t api-gateway:${BUILD_NUMBER} .
-                                echo "Loading api-gateway:${BUILD_NUMBER} into minikube"
-                                minikube image load api-gateway:${BUILD_NUMBER}
+                                if [ -f .use_minikube_docker ]; then
+                                    echo "Using Minikube docker daemon for build"
+                                    eval $(minikube -p minikube docker-env --shell=bash)
+                                    docker build -t api-gateway:${BUILD_NUMBER} .
+                                else
+                                    docker build -t api-gateway:${BUILD_NUMBER} .
+                                    echo "Loading api-gateway:${BUILD_NUMBER} into minikube"
+                                    minikube image load api-gateway:${BUILD_NUMBER}
+                                fi
                             '''
                         }
                     }
@@ -115,9 +128,15 @@ set -eo pipefail
                             sh '''#!/usr/bin/env bash
 set -eo pipefail
 
-                                docker build -t proxy-client:${BUILD_NUMBER} .
-                                echo "Loading proxy-client:${BUILD_NUMBER} into minikube"
-                                minikube image load proxy-client:${BUILD_NUMBER}
+                                if [ -f .use_minikube_docker ]; then
+                                    echo "Using Minikube docker daemon for build"
+                                    eval $(minikube -p minikube docker-env --shell=bash)
+                                    docker build -t proxy-client:${BUILD_NUMBER} .
+                                else
+                                    docker build -t proxy-client:${BUILD_NUMBER} .
+                                    echo "Loading proxy-client:${BUILD_NUMBER} into minikube"
+                                    minikube image load proxy-client:${BUILD_NUMBER}
+                                fi
                             '''
                         }
                     }
@@ -167,9 +186,15 @@ set -eo pipefail
                                     sh '''#!/usr/bin/env bash
 set -eo pipefail
 
-                                        docker build -t shipping-service:${BUILD_NUMBER} .
-                                        echo "Loading shipping-service:${BUILD_NUMBER} into minikube"
-                                        minikube image load shipping-service:${BUILD_NUMBER}
+                                        if [ -f .use_minikube_docker ]; then
+                                            echo "Using Minikube docker daemon for build"
+                                            eval $(minikube -p minikube docker-env --shell=bash)
+                                            docker build -t shipping-service:${BUILD_NUMBER} .
+                                        else
+                                            docker build -t shipping-service:${BUILD_NUMBER} .
+                                            echo "Loading shipping-service:${BUILD_NUMBER} into minikube"
+                                            minikube image load shipping-service:${BUILD_NUMBER}
+                                        fi
                                     '''
                                 }
                             }
@@ -191,9 +216,15 @@ set -eo pipefail
                                     sh '''#!/usr/bin/env bash
 set -eo pipefail
 
-                                            docker build -t product-service:${BUILD_NUMBER} .
-                                            echo "Loading product-service:${BUILD_NUMBER} into minikube"
-                                            minikube image load product-service:${BUILD_NUMBER}
+                                            if [ -f .use_minikube_docker ]; then
+                                                echo "Using Minikube docker daemon for build"
+                                                eval $(minikube -p minikube docker-env --shell=bash)
+                                                docker build -t product-service:${BUILD_NUMBER} .
+                                            else
+                                                docker build -t product-service:${BUILD_NUMBER} .
+                                                echo "Loading product-service:${BUILD_NUMBER} into minikube"
+                                                minikube image load product-service:${BUILD_NUMBER}
+                                            fi
                                     '''
                                 }
                             }
@@ -215,9 +246,15 @@ set -eo pipefail
                                     sh '''#!/usr/bin/env bash
 set -eo pipefail
 
-                                            docker build -t payment-service:${BUILD_NUMBER} .
-                                            echo "Loading payment-service:${BUILD_NUMBER} into minikube"
-                                            minikube image load payment-service:${BUILD_NUMBER}
+                                            if [ -f .use_minikube_docker ]; then
+                                                echo "Using Minikube docker daemon for build"
+                                                eval $(minikube -p minikube docker-env --shell=bash)
+                                                docker build -t payment-service:${BUILD_NUMBER} .
+                                            else
+                                                docker build -t payment-service:${BUILD_NUMBER} .
+                                                echo "Loading payment-service:${BUILD_NUMBER} into minikube"
+                                                minikube image load payment-service:${BUILD_NUMBER}
+                                            fi
                                     '''
                                 }
                             }
@@ -239,9 +276,15 @@ set -eo pipefail
                                     sh '''#!/usr/bin/env bash
 set -eo pipefail
 
-                                            docker build -t favourite-service:${BUILD_NUMBER} .
-                                            echo "Loading favourite-service:${BUILD_NUMBER} into minikube"
-                                            minikube image load favourite-service:${BUILD_NUMBER}
+                                            if [ -f .use_minikube_docker ]; then
+                                                echo "Using Minikube docker daemon for build"
+                                                eval $(minikube -p minikube docker-env --shell=bash)
+                                                docker build -t favourite-service:${BUILD_NUMBER} .
+                                            else
+                                                docker build -t favourite-service:${BUILD_NUMBER} .
+                                                echo "Loading favourite-service:${BUILD_NUMBER} into minikube"
+                                                minikube image load favourite-service:${BUILD_NUMBER}
+                                            fi
                                     '''
                                 }
                             }
@@ -263,9 +306,15 @@ set -eo pipefail
                                     sh '''#!/usr/bin/env bash
 set -eo pipefail
 
-                                            docker build -t user-service:${BUILD_NUMBER} .
-                                            echo "Loading user-service:${BUILD_NUMBER} into minikube"
-                                            minikube image load user-service:${BUILD_NUMBER}
+                                            if [ -f .use_minikube_docker ]; then
+                                                echo "Using Minikube docker daemon for build"
+                                                eval $(minikube -p minikube docker-env --shell=bash)
+                                                docker build -t user-service:${BUILD_NUMBER} .
+                                            else
+                                                docker build -t user-service:${BUILD_NUMBER} .
+                                                echo "Loading user-service:${BUILD_NUMBER} into minikube"
+                                                minikube image load user-service:${BUILD_NUMBER}
+                                            fi
                                     '''
                                 }
                             }
