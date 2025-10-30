@@ -57,19 +57,7 @@ pipeline {
                     steps {
                         echo '🐳 Construyendo imagen Docker de api-gateway...'
                         dir('api-gateway') {
-                            sh '''
-                                if [ "${USE_MINIKUBE_DOCKER}" = "true" ]; then
-                                    echo "⚠️ Docker socket not available — building inside Minikube's docker daemon"
-                                    eval $(minikube -p minikube docker-env --shell bash)
-                                    docker build -t api-gateway:latest .
-                                    docker tag api-gateway:latest api-gateway:${BUILD_NUMBER}
-                                    echo "ℹ️ Image built inside Minikube daemon; no explicit load required"
-                                else
-                                    docker build -t api-gateway:latest .
-                                    docker tag api-gateway:latest api-gateway:${BUILD_NUMBER}
-                                    docker save api-gateway:latest | docker exec -i minikube docker load
-                                fi
-                            '''
+                            sh "bash ${WORKSPACE}/scripts/docker-build-and-load.sh api-gateway"
                         }
                     }
                 }
@@ -85,18 +73,7 @@ pipeline {
                     steps {
                         echo '🐳 Construyendo imagen Docker de proxy-client...'
                         dir('proxy-client') {
-                            sh '''
-                                if [ "${USE_MINIKUBE_DOCKER}" = "true" ]; then
-                                    echo "⚠️ Docker socket not available — building inside Minikube's docker daemon"
-                                    eval $(minikube -p minikube docker-env --shell bash)
-                                    docker build -t proxy-client:latest .
-                                    docker tag proxy-client:latest proxy-client:${BUILD_NUMBER}
-                                else
-                                    docker build -t proxy-client:latest .
-                                    docker tag proxy-client:latest proxy-client:${BUILD_NUMBER}
-                                    docker save proxy-client:latest | docker exec -i minikube docker load
-                                fi
-                            '''
+                            sh "bash ${WORKSPACE}/scripts/docker-build-and-load.sh proxy-client"
                         }
                     }
                 }
@@ -140,18 +117,7 @@ pipeline {
                         stage('Docker Build shipping-service') {
                             steps {
                                 dir('shipping-service') {
-                                    sh '''
-                                        if [ "${USE_MINIKUBE_DOCKER}" = "true" ]; then
-                                            echo "⚠️ Building shipping-service inside Minikube's docker daemon"
-                                            eval $(minikube -p minikube docker-env --shell bash)
-                                            docker build -t shipping-service:latest .
-                                            docker tag shipping-service:latest shipping-service:${BUILD_NUMBER}
-                                        else
-                                            docker build -t shipping-service:latest .
-                                            docker tag shipping-service:latest shipping-service:${BUILD_NUMBER}
-                                            docker save shipping-service:latest | docker exec -i minikube docker load
-                                        fi
-                                    '''
+                                    sh "bash ${WORKSPACE}/scripts/docker-build-and-load.sh shipping-service"
                                 }
                             }
                         }
@@ -169,18 +135,7 @@ pipeline {
                         stage('Docker Build product-service') {
                             steps {
                                 dir('product-service') {
-                                    sh '''
-                                        if [ "${USE_MINIKUBE_DOCKER}" = "true" ]; then
-                                            echo "⚠️ Building product-service inside Minikube's docker daemon"
-                                            eval $(minikube -p minikube docker-env --shell bash)
-                                            docker build -t product-service:latest .
-                                            docker tag product-service:latest product-service:${BUILD_NUMBER}
-                                        else
-                                            docker build -t product-service:latest .
-                                            docker tag product-service:latest product-service:${BUILD_NUMBER}
-                                            docker save product-service:latest | docker exec -i minikube docker load
-                                        fi
-                                    '''
+                                    sh "bash ${WORKSPACE}/scripts/docker-build-and-load.sh product-service"
                                 }
                             }
                         }
@@ -198,18 +153,7 @@ pipeline {
                         stage('Docker Build payment-service') {
                             steps {
                                 dir('payment-service') {
-                                    sh '''
-                                        if [ "${USE_MINIKUBE_DOCKER}" = "true" ]; then
-                                            echo "⚠️ Building payment-service inside Minikube's docker daemon"
-                                            eval $(minikube -p minikube docker-env --shell bash)
-                                            docker build -t payment-service:latest .
-                                            docker tag payment-service:latest payment-service:${BUILD_NUMBER}
-                                        else
-                                            docker build -t payment-service:latest .
-                                            docker tag payment-service:latest payment-service:${BUILD_NUMBER}
-                                            docker save payment-service:latest | docker exec -i minikube docker load
-                                        fi
-                                    '''
+                                    sh "bash ${WORKSPACE}/scripts/docker-build-and-load.sh payment-service"
                                 }
                             }
                         }
@@ -227,18 +171,7 @@ pipeline {
                         stage('Docker Build favourite-service') {
                             steps {
                                 dir('favourite-service') {
-                                    sh '''
-                                        if [ "${USE_MINIKUBE_DOCKER}" = "true" ]; then
-                                            echo "⚠️ Building favourite-service inside Minikube's docker daemon"
-                                            eval $(minikube -p minikube docker-env --shell bash)
-                                            docker build -t favourite-service:latest .
-                                            docker tag favourite-service:latest favourite-service:${BUILD_NUMBER}
-                                        else
-                                            docker build -t favourite-service:latest .
-                                            docker tag favourite-service:latest favourite-service:${BUILD_NUMBER}
-                                            docker save favourite-service:latest | docker exec -i minikube docker load
-                                        fi
-                                    '''
+                                    sh "bash ${WORKSPACE}/scripts/docker-build-and-load.sh favourite-service"
                                 }
                             }
                         }
@@ -256,18 +189,7 @@ pipeline {
                         stage('Docker Build user-service') {
                             steps {
                                 dir('user-service') {
-                                    sh '''
-                                        if [ "${USE_MINIKUBE_DOCKER}" = "true" ]; then
-                                            echo "⚠️ Building user-service inside Minikube's docker daemon"
-                                            eval $(minikube -p minikube docker-env --shell bash)
-                                            docker build -t user-service:latest .
-                                            docker tag user-service:latest user-service:${BUILD_NUMBER}
-                                        else
-                                            docker build -t user-service:latest .
-                                            docker tag user-service:latest user-service:${BUILD_NUMBER}
-                                            docker save user-service:latest | docker exec -i minikube docker load
-                                        fi
-                                    '''
+                                    sh "bash ${WORKSPACE}/scripts/docker-build-and-load.sh user-service"
                                 }
                             }
                         }
