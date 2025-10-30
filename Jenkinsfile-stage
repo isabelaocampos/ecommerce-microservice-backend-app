@@ -44,14 +44,11 @@ pipeline {
                             steps {
                                 echo '🐳 Construyendo imagen Docker de user-service...'
                                 dir('user-service') {
-                                    script {
-                                        // Use a Docker image with docker CLI and mount host docker socket
-                                        docker.image('docker:24-dind').inside('-v /var/run/docker.sock:/var/run/docker.sock --privileged') {
-                                            sh 'docker build -t user-service:latest .'
-                                            sh 'docker tag user-service:latest user-service:${BUILD_NUMBER}'
-                                            sh 'docker save user-service:latest | minikube ssh --native-ssh=false "docker load"'
-                                        }
-                                    }
+                                    sh '''
+                                        docker build -t user-service:latest .
+                                        docker tag user-service:latest user-service:${BUILD_NUMBER}
+                                        docker save user-service:latest | minikube ssh --native-ssh=false "docker load"
+                                    '''
                                 }
                             }
                         }
@@ -80,13 +77,11 @@ pipeline {
                             steps {
                                 echo '🐳 Construyendo imagen Docker de product-service...'
                                 dir('product-service') {
-                                    script {
-                                        docker.image('docker:24-dind').inside('-v /var/run/docker.sock:/var/run/docker.sock --privileged') {
-                                            sh 'docker build -t product-service:latest .'
-                                            sh 'docker tag product-service:latest product-service:${BUILD_NUMBER}'
-                                            sh 'docker save product-service:latest | minikube ssh --native-ssh=false "docker load"'
-                                        }
-                                    }
+                                    sh '''
+                                        docker build -t product-service:latest .
+                                        docker tag product-service:latest product-service:${BUILD_NUMBER}
+                                        docker save product-service:latest | minikube ssh --native-ssh=false "docker load"
+                                    '''
                                 }
                             }
                         }
@@ -119,13 +114,11 @@ pipeline {
                             steps {
                                 echo '🐳 Construyendo imagen Docker de favourite-service...'
                                 dir('favourite-service') {
-                                    script {
-                                        docker.image('docker:24-dind').inside('-v /var/run/docker.sock:/var/run/docker.sock --privileged') {
-                                            sh 'docker build -t favourite-service:latest .'
-                                            sh 'docker tag favourite-service:latest favourite-service:${BUILD_NUMBER}'
-                                            sh 'docker save favourite-service:latest | minikube ssh --native-ssh=false "docker load"'
-                                        }
-                                    }
+                                    sh '''
+                                        docker build -t favourite-service:latest .
+                                        docker tag favourite-service:latest favourite-service:${BUILD_NUMBER}
+                                        docker save favourite-service:latest | minikube ssh --native-ssh=false "docker load"
+                                    '''
                                 }
                             }
                         }
@@ -154,13 +147,11 @@ pipeline {
                             steps {
                                 echo '🐳 Construyendo imagen Docker de order-service...'
                                 dir('order-service') {
-                                    script {
-                                        docker.image('docker:24-dind').inside('-v /var/run/docker.sock:/var/run/docker.sock --privileged') {
-                                            sh 'docker build -t order-service:latest .'
-                                            sh 'docker tag order-service:latest order-service:${BUILD_NUMBER}'
-                                            sh 'docker save order-service:latest | minikube ssh --native-ssh=false "docker load"'
-                                        }
-                                    }
+                                    sh '''
+                                        docker build -t order-service:latest .
+                                        docker tag order-service:latest order-service:${BUILD_NUMBER}
+                                        docker save order-service:latest | minikube ssh --native-ssh=false "docker load"
+                                    '''
                                 }
                             }
                         }
@@ -193,13 +184,11 @@ pipeline {
                             steps {
                                 echo '🐳 Construyendo imagen Docker de payment-service...'
                                 dir('payment-service') {
-                                    script {
-                                        docker.image('docker:24-dind').inside('-v /var/run/docker.sock:/var/run/docker.sock --privileged') {
-                                            sh 'docker build -t payment-service:latest .'
-                                            sh 'docker tag payment-service:latest payment-service:${BUILD_NUMBER}'
-                                            sh 'docker save payment-service:latest | minikube ssh --native-ssh=false "docker load"'
-                                        }
-                                    }
+                                    sh '''
+                                        docker build -t payment-service:latest .
+                                        docker tag payment-service:latest payment-service:${BUILD_NUMBER}
+                                        docker save payment-service:latest | minikube ssh --native-ssh=false "docker load"
+                                    '''
                                 }
                             }
                         }
@@ -228,13 +217,11 @@ pipeline {
                             steps {
                                 echo '🐳 Construyendo imagen Docker de shipping-service...'
                                 dir('shipping-service') {
-                                    script {
-                                        docker.image('docker:24-dind').inside('-v /var/run/docker.sock:/var/run/docker.sock --privileged') {
-                                            sh 'docker build -t shipping-service:latest .'
-                                            sh 'docker tag shipping-service:latest shipping-service:${BUILD_NUMBER}'
-                                            sh 'docker save shipping-service:latest | minikube ssh --native-ssh=false "docker load"'
-                                        }
-                                    }
+                                    sh '''
+                                        docker build -t shipping-service:latest .
+                                        docker tag shipping-service:latest shipping-service:${BUILD_NUMBER}
+                                        docker save shipping-service:latest | minikube ssh --native-ssh=false "docker load"
+                                    '''
                                 }
                             }
                         }
@@ -271,22 +258,22 @@ pipeline {
                     kubectl get namespace ecommerce || kubectl create namespace ecommerce
                     
                     # Aplicar deployments
-                    echo "📌 Desplegando user-service..."
+                    echo "🔌 Desplegando user-service..."
                     kubectl apply -f k8s/user-service-deployment.yaml
                     
-                    echo "📌 Desplegando product-service..."
+                    echo "🔌 Desplegando product-service..."
                     kubectl apply -f k8s/product-service-deployment.yaml
                     
-                    echo "📌 Desplegando favourite-service..."
+                    echo "🔌 Desplegando favourite-service..."
                     kubectl apply -f k8s/favourite-service-deployment.yaml
                     
-                    echo "📌 Desplegando order-service..."
+                    echo "🔌 Desplegando order-service..."
                     kubectl apply -f k8s/order-service-deployment.yaml
                     
-                    echo "📌 Desplegando payment-service..."
+                    echo "🔌 Desplegando payment-service..."
                     kubectl apply -f k8s/payment-service-deployment.yaml
                     
-                    echo "📌 Desplegando shipping-service..."
+                    echo "🔌 Desplegando shipping-service..."
                     kubectl apply -f k8s/shipping-service-deployment.yaml
                     
                     echo ""
@@ -328,146 +315,134 @@ pipeline {
             parallel {
                 stage('Test user-service en K8s') {
                     steps {
-                        script {
-                            echo '🔍 Verificando user-service en Kubernetes...'
-                            sh '''
-                                MINIKUBE_IP=$(minikube ip)
-                                SERVICE_URL="http://${MINIKUBE_IP}:30700"
-                                
-                                echo "Testeando: ${SERVICE_URL}/actuator/health"
-                                
-                                # Esperar a que el servicio responda
-                                for i in {1..30}; do
-                                    if curl -s -f "${SERVICE_URL}/actuator/health" > /dev/null 2>&1; then
-                                        echo "✅ user-service está respondiendo"
-                                        curl -s "${SERVICE_URL}/actuator/health" | grep -q "UP" && echo "✅ Health check OK"
-                                        break
-                                    fi
-                                    echo "Intento $i/30 - Esperando user-service..."
-                                    sleep 5
-                                done
-                            '''
-                        }
+                        echo '🔍 Verificando user-service en Kubernetes...'
+                        sh '''
+                            MINIKUBE_IP=$(minikube ip)
+                            SERVICE_URL="http://${MINIKUBE_IP}:30700"
+                            
+                            echo "Testeando: ${SERVICE_URL}/actuator/health"
+                            
+                            # Esperar a que el servicio responda
+                            for i in {1..30}; do
+                                if curl -s -f "${SERVICE_URL}/actuator/health" > /dev/null 2>&1; then
+                                    echo "✅ user-service está respondiendo"
+                                    curl -s "${SERVICE_URL}/actuator/health" | grep -q "UP" && echo "✅ Health check OK"
+                                    break
+                                fi
+                                echo "Intento $i/30 - Esperando user-service..."
+                                sleep 5
+                            done
+                        '''
                     }
                 }
                 
                 stage('Test product-service en K8s') {
                     steps {
-                        script {
-                            echo '🔍 Verificando product-service en Kubernetes...'
-                            sh '''
-                                MINIKUBE_IP=$(minikube ip)
-                                SERVICE_URL="http://${MINIKUBE_IP}:30500"
-                                
-                                echo "Testeando: ${SERVICE_URL}/actuator/health"
-                                
-                                for i in {1..30}; do
-                                    if curl -s -f "${SERVICE_URL}/actuator/health" > /dev/null 2>&1; then
-                                        echo "✅ product-service está respondiendo"
-                                        curl -s "${SERVICE_URL}/actuator/health" | grep -q "UP" && echo "✅ Health check OK"
-                                        break
-                                    fi
-                                    echo "Intento $i/30 - Esperando product-service..."
-                                    sleep 5
-                                done
-                            '''
-                        }
+                        echo '🔍 Verificando product-service en Kubernetes...'
+                        sh '''
+                            MINIKUBE_IP=$(minikube ip)
+                            SERVICE_URL="http://${MINIKUBE_IP}:30500"
+                            
+                            echo "Testeando: ${SERVICE_URL}/actuator/health"
+                            
+                            for i in {1..30}; do
+                                if curl -s -f "${SERVICE_URL}/actuator/health" > /dev/null 2>&1; then
+                                    echo "✅ product-service está respondiendo"
+                                    curl -s "${SERVICE_URL}/actuator/health" | grep -q "UP" && echo "✅ Health check OK"
+                                    break
+                                fi
+                                echo "Intento $i/30 - Esperando product-service..."
+                                sleep 5
+                            done
+                        '''
                     }
                 }
                 
                 stage('Test order-service en K8s') {
                     steps {
-                        script {
-                            echo '🔍 Verificando order-service en Kubernetes...'
-                            sh '''
-                                MINIKUBE_IP=$(minikube ip)
-                                SERVICE_URL="http://${MINIKUBE_IP}:30300"
-                                
-                                echo "Testeando: ${SERVICE_URL}/actuator/health"
-                                
-                                for i in {1..30}; do
-                                    if curl -s -f "${SERVICE_URL}/actuator/health" > /dev/null 2>&1; then
-                                        echo "✅ order-service está respondiendo"
-                                        curl -s "${SERVICE_URL}/actuator/health" | grep -q "UP" && echo "✅ Health check OK"
-                                        break
-                                    fi
-                                    echo "Intento $i/30 - Esperando order-service..."
-                                    sleep 5
-                                done
-                            '''
-                        }
+                        echo '🔍 Verificando order-service en Kubernetes...'
+                        sh '''
+                            MINIKUBE_IP=$(minikube ip)
+                            SERVICE_URL="http://${MINIKUBE_IP}:30300"
+                            
+                            echo "Testeando: ${SERVICE_URL}/actuator/health"
+                            
+                            for i in {1..30}; do
+                                if curl -s -f "${SERVICE_URL}/actuator/health" > /dev/null 2>&1; then
+                                    echo "✅ order-service está respondiendo"
+                                    curl -s "${SERVICE_URL}/actuator/health" | grep -q "UP" && echo "✅ Health check OK"
+                                    break
+                                fi
+                                echo "Intento $i/30 - Esperando order-service..."
+                                sleep 5
+                            done
+                        '''
                     }
                 }
                 
                 stage('Test payment-service en K8s') {
                     steps {
-                        script {
-                            echo '🔍 Verificando payment-service en Kubernetes...'
-                            sh '''
-                                MINIKUBE_IP=$(minikube ip)
-                                SERVICE_URL="http://${MINIKUBE_IP}:30400"
-                                
-                                echo "Testeando: ${SERVICE_URL}/actuator/health"
-                                
-                                for i in {1..30}; do
-                                    if curl -s -f "${SERVICE_URL}/actuator/health" > /dev/null 2>&1; then
-                                        echo "✅ payment-service está respondiendo"
-                                        curl -s "${SERVICE_URL}/actuator/health" | grep -q "UP" && echo "✅ Health check OK"
-                                        break
-                                    fi
-                                    echo "Intento $i/30 - Esperando payment-service..."
-                                    sleep 5
-                                done
-                            '''
-                        }
+                        echo '🔍 Verificando payment-service en Kubernetes...'
+                        sh '''
+                            MINIKUBE_IP=$(minikube ip)
+                            SERVICE_URL="http://${MINIKUBE_IP}:30400"
+                            
+                            echo "Testeando: ${SERVICE_URL}/actuator/health"
+                            
+                            for i in {1..30}; do
+                                if curl -s -f "${SERVICE_URL}/actuator/health" > /dev/null 2>&1; then
+                                    echo "✅ payment-service está respondiendo"
+                                    curl -s "${SERVICE_URL}/actuator/health" | grep -q "UP" && echo "✅ Health check OK"
+                                    break
+                                fi
+                                echo "Intento $i/30 - Esperando payment-service..."
+                                sleep 5
+                            done
+                        '''
                     }
                 }
                 
                 stage('Test shipping-service en K8s') {
                     steps {
-                        script {
-                            echo '🔍 Verificando shipping-service en Kubernetes...'
-                            sh '''
-                                MINIKUBE_IP=$(minikube ip)
-                                SERVICE_URL="http://${MINIKUBE_IP}:30600"
-                                
-                                echo "Testeando: ${SERVICE_URL}/actuator/health"
-                                
-                                for i in {1..30}; do
-                                    if curl -s -f "${SERVICE_URL}/actuator/health" > /dev/null 2>&1; then
-                                        echo "✅ shipping-service está respondiendo"
-                                        curl -s "${SERVICE_URL}/actuator/health" | grep -q "UP" && echo "✅ Health check OK"
-                                        break
-                                    fi
-                                    echo "Intento $i/30 - Esperando shipping-service..."
-                                    sleep 5
-                                done
-                            '''
-                        }
+                        echo '🔍 Verificando shipping-service en Kubernetes...'
+                        sh '''
+                            MINIKUBE_IP=$(minikube ip)
+                            SERVICE_URL="http://${MINIKUBE_IP}:30600"
+                            
+                            echo "Testeando: ${SERVICE_URL}/actuator/health"
+                            
+                            for i in {1..30}; do
+                                if curl -s -f "${SERVICE_URL}/actuator/health" > /dev/null 2>&1; then
+                                    echo "✅ shipping-service está respondiendo"
+                                    curl -s "${SERVICE_URL}/actuator/health" | grep -q "UP" && echo "✅ Health check OK"
+                                    break
+                                fi
+                                echo "Intento $i/30 - Esperando shipping-service..."
+                                sleep 5
+                            done
+                        '''
                     }
                 }
                 
                 stage('Test favourite-service en K8s') {
                     steps {
-                        script {
-                            echo '🔍 Verificando favourite-service en Kubernetes...'
-                            sh '''
-                                MINIKUBE_IP=$(minikube ip)
-                                SERVICE_URL="http://${MINIKUBE_IP}:30800"
-                                
-                                echo "Testeando: ${SERVICE_URL}/actuator/health"
-                                
-                                for i in {1..30}; do
-                                    if curl -s -f "${SERVICE_URL}/actuator/health" > /dev/null 2>&1; then
-                                        echo "✅ favourite-service está respondiendo"
-                                        curl -s "${SERVICE_URL}/actuator/health" | grep -q "UP" && echo "✅ Health check OK"
-                                        break
-                                    fi
-                                    echo "Intento $i/30 - Esperando favourite-service..."
-                                    sleep 5
-                                done
-                            '''
-                        }
+                        echo '🔍 Verificando favourite-service en Kubernetes...'
+                        sh '''
+                            MINIKUBE_IP=$(minikube ip)
+                            SERVICE_URL="http://${MINIKUBE_IP}:30800"
+                            
+                            echo "Testeando: ${SERVICE_URL}/actuator/health"
+                            
+                            for i in {1..30}; do
+                                if curl -s -f "${SERVICE_URL}/actuator/health" > /dev/null 2>&1; then
+                                    echo "✅ favourite-service está respondiendo"
+                                    curl -s "${SERVICE_URL}/actuator/health" | grep -q "UP" && echo "✅ Health check OK"
+                                    break
+                                fi
+                                echo "Intento $i/30 - Esperando favourite-service..."
+                                sleep 5
+                            done
+                        '''
                     }
                 }
             }
@@ -541,5 +516,3 @@ pipeline {
         }
     }
 }
-
-
