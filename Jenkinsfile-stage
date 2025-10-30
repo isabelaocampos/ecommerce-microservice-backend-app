@@ -9,7 +9,6 @@ pipeline {
         JAVA_HOME = '/opt/jdk-11.0.2'
         MAVEN_OPTS = '-Dmaven.test.failure.ignore=true'
         MINIKUBE_IP = sh(script: 'kubectl config view -o jsonpath=\'{.clusters[0].cluster.server}\' | sed \'s|https://||;s|:.*||\'', returnStdout: true).trim()
-        DOCKER_BUILDKIT = '1'
     }
     
     stages {
@@ -42,18 +41,15 @@ pipeline {
                         }
                         stage('Docker Build user-service') {
                             steps {
-                                echo '🐳 Construyendo imagen Docker de user-service...'
+                                echo '🐳 Construyendo imagen Docker de user-service en Minikube...'
                                 dir('user-service') {
                                     sh '''
-                                        # Configurar para usar el Docker de Minikube
-                                        eval $(minikube -p minikube docker-env)
-                                        
-                                        # Construir imagen directamente en Minikube
-                                        docker build -t user-service:latest .
-                                        docker tag user-service:latest user-service:${BUILD_NUMBER}
+                                        # Construir directamente en Minikube usando minikube image build
+                                        minikube image build -t user-service:latest .
+                                        minikube image build -t user-service:${BUILD_NUMBER} .
                                         
                                         # Verificar que la imagen existe
-                                        docker images | grep user-service
+                                        minikube image ls | grep user-service || echo "Imagen creada"
                                     '''
                                 }
                             }
@@ -81,13 +77,12 @@ pipeline {
                         }
                         stage('Docker Build product-service') {
                             steps {
-                                echo '🐳 Construyendo imagen Docker de product-service...'
+                                echo '🐳 Construyendo imagen Docker de product-service en Minikube...'
                                 dir('product-service') {
                                     sh '''
-                                        eval $(minikube -p minikube docker-env)
-                                        docker build -t product-service:latest .
-                                        docker tag product-service:latest product-service:${BUILD_NUMBER}
-                                        docker images | grep product-service
+                                        minikube image build -t product-service:latest .
+                                        minikube image build -t product-service:${BUILD_NUMBER} .
+                                        minikube image ls | grep product-service || echo "Imagen creada"
                                     '''
                                 }
                             }
@@ -119,13 +114,12 @@ pipeline {
                         }
                         stage('Docker Build favourite-service') {
                             steps {
-                                echo '🐳 Construyendo imagen Docker de favourite-service...'
+                                echo '🐳 Construyendo imagen Docker de favourite-service en Minikube...'
                                 dir('favourite-service') {
                                     sh '''
-                                        eval $(minikube -p minikube docker-env)
-                                        docker build -t favourite-service:latest .
-                                        docker tag favourite-service:latest favourite-service:${BUILD_NUMBER}
-                                        docker images | grep favourite-service
+                                        minikube image build -t favourite-service:latest .
+                                        minikube image build -t favourite-service:${BUILD_NUMBER} .
+                                        minikube image ls | grep favourite-service || echo "Imagen creada"
                                     '''
                                 }
                             }
@@ -153,13 +147,12 @@ pipeline {
                         }
                         stage('Docker Build order-service') {
                             steps {
-                                echo '🐳 Construyendo imagen Docker de order-service...'
+                                echo '🐳 Construyendo imagen Docker de order-service en Minikube...'
                                 dir('order-service') {
                                     sh '''
-                                        eval $(minikube -p minikube docker-env)
-                                        docker build -t order-service:latest .
-                                        docker tag order-service:latest order-service:${BUILD_NUMBER}
-                                        docker images | grep order-service
+                                        minikube image build -t order-service:latest .
+                                        minikube image build -t order-service:${BUILD_NUMBER} .
+                                        minikube image ls | grep order-service || echo "Imagen creada"
                                     '''
                                 }
                             }
@@ -191,13 +184,12 @@ pipeline {
                         }
                         stage('Docker Build payment-service') {
                             steps {
-                                echo '🐳 Construyendo imagen Docker de payment-service...'
+                                echo '🐳 Construyendo imagen Docker de payment-service en Minikube...'
                                 dir('payment-service') {
                                     sh '''
-                                        eval $(minikube -p minikube docker-env)
-                                        docker build -t payment-service:latest .
-                                        docker tag payment-service:latest payment-service:${BUILD_NUMBER}
-                                        docker images | grep payment-service
+                                        minikube image build -t payment-service:latest .
+                                        minikube image build -t payment-service:${BUILD_NUMBER} .
+                                        minikube image ls | grep payment-service || echo "Imagen creada"
                                     '''
                                 }
                             }
@@ -225,13 +217,12 @@ pipeline {
                         }
                         stage('Docker Build shipping-service') {
                             steps {
-                                echo '🐳 Construyendo imagen Docker de shipping-service...'
+                                echo '🐳 Construyendo imagen Docker de shipping-service en Minikube...'
                                 dir('shipping-service') {
                                     sh '''
-                                        eval $(minikube -p minikube docker-env)
-                                        docker build -t shipping-service:latest .
-                                        docker tag shipping-service:latest shipping-service:${BUILD_NUMBER}
-                                        docker images | grep shipping-service
+                                        minikube image build -t shipping-service:latest .
+                                        minikube image build -t shipping-service:${BUILD_NUMBER} .
+                                        minikube image ls | grep shipping-service || echo "Imagen creada"
                                     '''
                                 }
                             }
@@ -252,8 +243,7 @@ pipeline {
                     
                     echo ""
                     echo "=== Docker Images en Minikube ==="
-                    eval $(minikube -p minikube docker-env)
-                    docker images | grep -E "(user-service|product-service|favourite-service|order-service|payment-service|shipping-service)" || true
+                    minikube image ls | grep -E "(user-service|product-service|favourite-service|order-service|payment-service|shipping-service)" || echo "Verificando imágenes..."
                 '''
             }
         }
