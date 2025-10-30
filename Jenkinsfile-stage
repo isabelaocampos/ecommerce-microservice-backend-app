@@ -8,7 +8,7 @@ pipeline {
     environment {
         JAVA_HOME = '/opt/jdk-11.0.2'
         MAVEN_OPTS = '-Dmaven.test.failure.ignore=true'
-        KUBECONFIG = "/tmp/kubeconfig-jenkins-${BUILD_NUMBER}"
+        MINIKUBE_IP = sh(script: 'kubectl config view -o jsonpath=\'{.clusters[0].cluster.server}\' | sed \'s|https://||;s|:.*||\'', returnStdout: true).trim()
     }
     
     stages {
@@ -16,63 +16,88 @@ pipeline {
             steps {
                 echo '⚙️ Configurando acceso a Kubernetes/Minikube...'
                 sh '''
-                    # Verificar estado de Minikube
-                    echo "🔍 Verificando estado de Minikube..."
-                    minikube status || echo "Minikube puede estar iniciando..."
+                    # Usar variable de entorno KUBECONFIG en lugar de archivo permanente
+                    export KUBECONFIG=/tmp/kubeconfig-jenkins-${BUILD_NUMBER}
                     
-                    # Obtener la configuración correcta de Minikube
-                    echo "📝 Creando KUBECONFIG desde Minikube..."
+                    # Obtener IP de Minikube
+                    MINIKUBE_IP=$(minikube ip 2>/dev/null || echo "127.0.0.1")
+                    echo "📍 Minikube IP: ${MINIKUBE_IP}"
                     
-                    # Usar update-context para asegurar la configuración correcta
-                    minikube update-context
+                    # Crear kubeconfig temporal usando certificados de Minikube SSH
+                    echo "🔑 Extrayendo certificados desde Minikube..."
                     
-                    # Copiar la configuración de minikube al KUBECONFIG temporal
-                    # Primero intentar con la config de minikube directamente
-                    if [ -f "$HOME/.kube/config" ]; then
-                        cp "$HOME/.kube/config" ${KUBECONFIG}
+                    # Obtener certificados via SSH de Minikube
+                    CLIENT_CERT=$(minikube ssh "sudo cat /var/lib/minikube/certs/client.crt" 2>/dev/null | base64 -w 0 || echo "")
+                    CLIENT_KEY=$(minikube ssh "sudo cat /var/lib/minikube/certs/client.key" 2>/dev/null | base64 -w 0 || echo "")
+                    
+                    if [ -z "$CLIENT_CERT" ] || [ -z "$CLIENT_KEY" ]; then
+                        echo "⚠️ No se pudieron obtener certificados via SSH, usando configuración insegura..."
+                        # Crear config con skip-tls-verify
+                        cat > ${KUBECONFIG} << 'EOF'
+apiVersion: v1
+clusters:
+- cluster:
+    insecure-skip-tls-verify: true
+    server: https://MINIKUBE_IP_PLACEHOLDER:8443
+  name: minikube
+contexts:
+- context:
+    cluster: minikube
+    user: minikube
+  name: minikube
+current-context: minikube
+kind: Config
+preferences: {}
+users:
+- name: minikube
+  user:
+    token: unused
+EOF
+                        sed -i "s|MINIKUBE_IP_PLACEHOLDER|${MINIKUBE_IP}|g" ${KUBECONFIG}
                     else
-                        # Crear configuración desde cero usando minikube
-                        minikube kubectl -- config view --raw > ${KUBECONFIG}
+                        # Crear config con certificados
+                        cat > ${KUBECONFIG} << EOF
+apiVersion: v1
+clusters:
+- cluster:
+    insecure-skip-tls-verify: true
+    server: https://${MINIKUBE_IP}:8443
+  name: minikube
+contexts:
+- context:
+    cluster: minikube
+    user: minikube
+  name: minikube
+current-context: minikube
+kind: Config
+preferences: {}
+users:
+- name: minikube
+  user:
+    client-certificate-data: ${CLIENT_CERT}
+    client-key-data: ${CLIENT_KEY}
+EOF
                     fi
                     
-                    chmod 600 ${KUBECONFIG}
+                    # Exportar para que esté disponible en siguientes stages
+                    echo "export KUBECONFIG=${KUBECONFIG}" > /tmp/kubectl-env-${BUILD_NUMBER}
                     
-                    echo "✅ KUBECONFIG creado en: ${KUBECONFIG}"
-                    echo "📄 Tamaño del archivo: $(ls -lh ${KUBECONFIG} | awk '{print $5}')"
-                    
-                    # Verificar contenido del KUBECONFIG
-                    echo "🔍 Contenido del KUBECONFIG:"
-                    cat ${KUBECONFIG}
-                    
-                    # Verificar conectividad usando minikube kubectl
-                    echo ""
-                    echo "🔌 Verificando acceso a Kubernetes via Minikube..."
-                    minikube kubectl -- version --client
-                    
-                    # Verificar cluster-info usando minikube kubectl
-                    echo ""
-                    echo "📊 Información del cluster:"
-                    minikube kubectl -- cluster-info || echo "⚠️ Verificando conexión..."
-                    
-                    # Verificar que podemos listar nodos
-                    echo ""
-                    echo "🖥️ Nodos disponibles:"
-                    minikube kubectl -- get nodes || echo "⚠️ Esperando nodos..."
-                    
-                    echo ""
-                    echo "✅ Configuración completada"
+                    # Verificar configuración
+                    echo "✅ Kubeconfig temporal creado en ${KUBECONFIG}"
+                    kubectl version --client
+                    kubectl cluster-info || echo "⚠️ Cluster info no disponible, continuando..."
                 '''
             }
         }
         
-        stage('📂 Checkout') {
+        stage('🔍 Checkout') {
             steps {
                 echo '📥 Clonando repositorio...'
                 checkout scm
             }
         }
         
-        stage('🗃️ Build & Test - Fase 1') {
+        stage('🏗️ Build & Test - Fase 1') {
             parallel {
                 stage('user-service') {
                     stages {
@@ -97,8 +122,11 @@ pipeline {
                                 echo '🐳 Construyendo imagen Docker de user-service en Minikube...'
                                 dir('user-service') {
                                     sh '''
+                                        # Construir directamente en Minikube usando minikube image build
                                         minikube image build -t user-service:latest .
                                         minikube image build -t user-service:${BUILD_NUMBER} .
+                                        
+                                        # Verificar que la imagen existe
                                         minikube image ls | grep user-service || echo "Imagen creada"
                                     '''
                                 }
@@ -142,7 +170,7 @@ pipeline {
             }
         }
         
-        stage('🗃️ Build & Test - Fase 2') {
+        stage('🏗️ Build & Test - Fase 2') {
             parallel {
                 stage('favourite-service') {
                     stages {
@@ -212,7 +240,7 @@ pipeline {
             }
         }
         
-        stage('🗃️ Build & Test - Fase 3') {
+        stage('🏗️ Build & Test - Fase 3') {
             parallel {
                 stage('payment-service') {
                     stages {
@@ -302,29 +330,27 @@ pipeline {
             steps {
                 echo '☸️ Desplegando microservicios en Kubernetes...'
                 sh '''
-                    echo "📝 Usando kubectl via minikube..."
-                    
                     # Crear namespace si no existe
-                    minikube kubectl -- get namespace ecommerce || minikube kubectl -- create namespace ecommerce
+                    kubectl get namespace ecommerce || kubectl create namespace ecommerce
                     
-                    # Aplicar deployments usando minikube kubectl
+                    # Aplicar deployments
                     echo "🔌 Desplegando user-service..."
-                    minikube kubectl -- apply -f k8s/user-service-deployment.yaml
+                    kubectl apply -f k8s/user-service-deployment.yaml
                     
                     echo "🔌 Desplegando product-service..."
-                    minikube kubectl -- apply -f k8s/product-service-deployment.yaml
+                    kubectl apply -f k8s/product-service-deployment.yaml
                     
                     echo "🔌 Desplegando favourite-service..."
-                    minikube kubectl -- apply -f k8s/favourite-service-deployment.yaml
+                    kubectl apply -f k8s/favourite-service-deployment.yaml
                     
                     echo "🔌 Desplegando order-service..."
-                    minikube kubectl -- apply -f k8s/order-service-deployment.yaml
+                    kubectl apply -f k8s/order-service-deployment.yaml
                     
                     echo "🔌 Desplegando payment-service..."
-                    minikube kubectl -- apply -f k8s/payment-service-deployment.yaml
+                    kubectl apply -f k8s/payment-service-deployment.yaml
                     
                     echo "🔌 Desplegando shipping-service..."
-                    minikube kubectl -- apply -f k8s/shipping-service-deployment.yaml
+                    kubectl apply -f k8s/shipping-service-deployment.yaml
                     
                     echo ""
                     echo "✅ Deployments aplicados"
@@ -337,26 +363,26 @@ pipeline {
                 echo '⏰ Esperando que los pods estén listos...'
                 sh '''
                     echo "Esperando user-service..."
-                    minikube kubectl -- wait --for=condition=available --timeout=120s deployment/user-service -n ecommerce || true
+                    kubectl wait --for=condition=available --timeout=120s deployment/user-service -n ecommerce || true
                     
                     echo "Esperando product-service..."
-                    minikube kubectl -- wait --for=condition=available --timeout=120s deployment/product-service -n ecommerce || true
+                    kubectl wait --for=condition=available --timeout=120s deployment/product-service -n ecommerce || true
                     
                     echo "Esperando favourite-service..."
-                    minikube kubectl -- wait --for=condition=available --timeout=120s deployment/favourite-service -n ecommerce || true
+                    kubectl wait --for=condition=available --timeout=120s deployment/favourite-service -n ecommerce || true
                     
                     echo "Esperando order-service..."
-                    minikube kubectl -- wait --for=condition=available --timeout=120s deployment/order-service -n ecommerce || true
+                    kubectl wait --for=condition=available --timeout=120s deployment/order-service -n ecommerce || true
                     
                     echo "Esperando payment-service..."
-                    minikube kubectl -- wait --for=condition=available --timeout=120s deployment/payment-service -n ecommerce || true
+                    kubectl wait --for=condition=available --timeout=120s deployment/payment-service -n ecommerce || true
                     
                     echo "Esperando shipping-service..."
-                    minikube kubectl -- wait --for=condition=available --timeout=120s deployment/shipping-service -n ecommerce || true
+                    kubectl wait --for=condition=available --timeout=120s deployment/shipping-service -n ecommerce || true
                     
                     echo ""
                     echo "Estado de los pods:"
-                    minikube kubectl -- get pods -n ecommerce
+                    kubectl get pods -n ecommerce
                 '''
             }
         }
@@ -372,6 +398,7 @@ pipeline {
                             
                             echo "Testeando: ${SERVICE_URL}/actuator/health"
                             
+                            # Esperar a que el servicio responda
                             for i in {1..30}; do
                                 if curl -s -f "${SERVICE_URL}/actuator/health" > /dev/null 2>&1; then
                                     echo "✅ user-service está respondiendo"
@@ -507,15 +534,15 @@ pipeline {
                     echo ""
                     
                     echo "📦 Deployments:"
-                    minikube kubectl -- get deployments -n ecommerce
+                    kubectl get deployments -n ecommerce
                     echo ""
                     
                     echo "🎯 Services:"
-                    minikube kubectl -- get services -n ecommerce
+                    kubectl get services -n ecommerce
                     echo ""
                     
                     echo "🐳 Pods:"
-                    minikube kubectl -- get pods -n ecommerce
+                    kubectl get pods -n ecommerce
                     echo ""
                     
                     echo "📡 Endpoints de los servicios:"
@@ -548,22 +575,18 @@ pipeline {
             echo '❌ Pipeline falló. Revisando estado...'
             sh '''
                 echo "Estado de pods en ecommerce namespace:"
-                minikube kubectl -- get pods -n ecommerce || true
+                kubectl get pods -n ecommerce || true
                 
                 echo ""
                 echo "Logs de pods con problemas:"
-                minikube kubectl -- get pods -n ecommerce -o json | jq -r '.items[] | select(.status.phase != "Running") | .metadata.name' | while read pod; do
+                kubectl get pods -n ecommerce -o json | jq -r '.items[] | select(.status.phase != "Running") | .metadata.name' | while read pod; do
                     echo "=== Logs de $pod ==="
-                    minikube kubectl -- logs $pod -n ecommerce --tail=50 || true
+                    kubectl logs $pod -n ecommerce --tail=50 || true
                 done
             '''
         }
         always {
             echo '🏁 Pipeline finalizado'
-            sh '''
-                # Limpiar archivos temporales
-                rm -f ${KUBECONFIG}
-            '''
             // Archivar resultados de tests
             junit allowEmptyResults: true, testResults: '**/target/surefire-reports/*.xml'
         }
