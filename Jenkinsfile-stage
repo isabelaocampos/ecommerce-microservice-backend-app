@@ -16,18 +16,47 @@ pipeline {
             steps {
                 echo '⚙️ Configurando acceso a Kubernetes/Minikube...'
                 sh '''
-                    # Crear directorio para kubeconfig si no existe
-                    mkdir -p ~/.kube
+                    # Usar variable de entorno KUBECONFIG en lugar de archivo permanente
+                    export KUBECONFIG=/tmp/kubeconfig-jenkins-${BUILD_NUMBER}
                     
                     # Obtener IP de Minikube
                     MINIKUBE_IP=$(minikube ip 2>/dev/null || echo "127.0.0.1")
+                    echo "📍 Minikube IP: ${MINIKUBE_IP}"
                     
-                    # Obtener puerto de API server desde el contenedor de minikube
-                    # Usamos minikube ssh para obtener los certificados directamente
-                    echo "🔑 Configurando certificados desde Minikube..."
+                    # Crear kubeconfig temporal usando certificados de Minikube SSH
+                    echo "🔑 Extrayendo certificados desde Minikube..."
                     
-                    # Crear kubeconfig usando minikube directamente sin depender del archivo local
-                    cat > ~/.kube/config << EOF
+                    # Obtener certificados via SSH de Minikube
+                    CLIENT_CERT=$(minikube ssh "sudo cat /var/lib/minikube/certs/client.crt" 2>/dev/null | base64 -w 0 || echo "")
+                    CLIENT_KEY=$(minikube ssh "sudo cat /var/lib/minikube/certs/client.key" 2>/dev/null | base64 -w 0 || echo "")
+                    
+                    if [ -z "$CLIENT_CERT" ] || [ -z "$CLIENT_KEY" ]; then
+                        echo "⚠️ No se pudieron obtener certificados via SSH, usando configuración insegura..."
+                        # Crear config con skip-tls-verify
+                        cat > ${KUBECONFIG} << 'EOF'
+apiVersion: v1
+clusters:
+- cluster:
+    insecure-skip-tls-verify: true
+    server: https://MINIKUBE_IP_PLACEHOLDER:8443
+  name: minikube
+contexts:
+- context:
+    cluster: minikube
+    user: minikube
+  name: minikube
+current-context: minikube
+kind: Config
+preferences: {}
+users:
+- name: minikube
+  user:
+    token: unused
+EOF
+                        sed -i "s|MINIKUBE_IP_PLACEHOLDER|${MINIKUBE_IP}|g" ${KUBECONFIG}
+                    else
+                        # Crear config con certificados
+                        cat > ${KUBECONFIG} << EOF
 apiVersion: v1
 clusters:
 - cluster:
@@ -38,7 +67,6 @@ contexts:
 - context:
     cluster: minikube
     user: minikube
-    namespace: default
   name: minikube
 current-context: minikube
 kind: Config
@@ -46,14 +74,18 @@ preferences: {}
 users:
 - name: minikube
   user:
-    client-certificate-data: $(minikube ssh "sudo cat /var/lib/minikube/certs/client.crt" | base64 -w 0)
-    client-key-data: $(minikube ssh "sudo cat /var/lib/minikube/certs/client.key" | base64 -w 0)
+    client-certificate-data: ${CLIENT_CERT}
+    client-key-data: ${CLIENT_KEY}
 EOF
+                    fi
+                    
+                    # Exportar para que esté disponible en siguientes stages
+                    echo "export KUBECONFIG=${KUBECONFIG}" > /tmp/kubectl-env-${BUILD_NUMBER}
                     
                     # Verificar configuración
-                    echo "✅ Kubeconfig creado"
+                    echo "✅ Kubeconfig temporal creado en ${KUBECONFIG}"
                     kubectl version --client
-                    kubectl get nodes || echo "⚠️ Esperando conexión con cluster..."
+                    kubectl cluster-info || echo "⚠️ Cluster info no disponible, continuando..."
                 '''
             }
         }
@@ -298,36 +330,27 @@ EOF
             steps {
                 echo '☸️ Desplegando microservicios en Kubernetes...'
                 sh '''
-                    # Asegurar que tenemos el contexto correcto
-                    minikube update-context || true
-                    
-                    # Usar kubectl a través de minikube si el directo falla
-                    KUBECTL_CMD="kubectl"
-                    if ! kubectl version --client > /dev/null 2>&1; then
-                        KUBECTL_CMD="minikube kubectl --"
-                    fi
-                    
                     # Crear namespace si no existe
-                    $KUBECTL_CMD get namespace ecommerce || $KUBECTL_CMD create namespace ecommerce
+                    kubectl get namespace ecommerce || kubectl create namespace ecommerce
                     
                     # Aplicar deployments
                     echo "🔌 Desplegando user-service..."
-                    $KUBECTL_CMD apply -f k8s/user-service-deployment.yaml
+                    kubectl apply -f k8s/user-service-deployment.yaml
                     
                     echo "🔌 Desplegando product-service..."
-                    $KUBECTL_CMD apply -f k8s/product-service-deployment.yaml
+                    kubectl apply -f k8s/product-service-deployment.yaml
                     
                     echo "🔌 Desplegando favourite-service..."
-                    $KUBECTL_CMD apply -f k8s/favourite-service-deployment.yaml
+                    kubectl apply -f k8s/favourite-service-deployment.yaml
                     
                     echo "🔌 Desplegando order-service..."
-                    $KUBECTL_CMD apply -f k8s/order-service-deployment.yaml
+                    kubectl apply -f k8s/order-service-deployment.yaml
                     
                     echo "🔌 Desplegando payment-service..."
-                    $KUBECTL_CMD apply -f k8s/payment-service-deployment.yaml
+                    kubectl apply -f k8s/payment-service-deployment.yaml
                     
                     echo "🔌 Desplegando shipping-service..."
-                    $KUBECTL_CMD apply -f k8s/shipping-service-deployment.yaml
+                    kubectl apply -f k8s/shipping-service-deployment.yaml
                     
                     echo ""
                     echo "✅ Deployments aplicados"
@@ -339,33 +362,27 @@ EOF
             steps {
                 echo '⏰ Esperando que los pods estén listos...'
                 sh '''
-                    # Determinar comando kubectl correcto
-                    KUBECTL_CMD="kubectl"
-                    if ! kubectl version --client > /dev/null 2>&1; then
-                        KUBECTL_CMD="minikube kubectl --"
-                    fi
-                    
                     echo "Esperando user-service..."
-                    $KUBECTL_CMD wait --for=condition=available --timeout=120s deployment/user-service -n ecommerce || true
+                    kubectl wait --for=condition=available --timeout=120s deployment/user-service -n ecommerce || true
                     
                     echo "Esperando product-service..."
-                    $KUBECTL_CMD wait --for=condition=available --timeout=120s deployment/product-service -n ecommerce || true
+                    kubectl wait --for=condition=available --timeout=120s deployment/product-service -n ecommerce || true
                     
                     echo "Esperando favourite-service..."
-                    $KUBECTL_CMD wait --for=condition=available --timeout=120s deployment/favourite-service -n ecommerce || true
+                    kubectl wait --for=condition=available --timeout=120s deployment/favourite-service -n ecommerce || true
                     
                     echo "Esperando order-service..."
-                    $KUBECTL_CMD wait --for=condition=available --timeout=120s deployment/order-service -n ecommerce || true
+                    kubectl wait --for=condition=available --timeout=120s deployment/order-service -n ecommerce || true
                     
                     echo "Esperando payment-service..."
-                    $KUBECTL_CMD wait --for=condition=available --timeout=120s deployment/payment-service -n ecommerce || true
+                    kubectl wait --for=condition=available --timeout=120s deployment/payment-service -n ecommerce || true
                     
                     echo "Esperando shipping-service..."
-                    $KUBECTL_CMD wait --for=condition=available --timeout=120s deployment/shipping-service -n ecommerce || true
+                    kubectl wait --for=condition=available --timeout=120s deployment/shipping-service -n ecommerce || true
                     
                     echo ""
                     echo "Estado de los pods:"
-                    $KUBECTL_CMD get pods -n ecommerce
+                    kubectl get pods -n ecommerce
                 '''
             }
         }
@@ -511,27 +528,21 @@ EOF
             steps {
                 echo '📋 Generando reporte del deployment...'
                 sh '''
-                    # Determinar comando kubectl correcto
-                    KUBECTL_CMD="kubectl"
-                    if ! kubectl version --client > /dev/null 2>&1; then
-                        KUBECTL_CMD="minikube kubectl --"
-                    fi
-                    
                     echo "========================================="
                     echo "    REPORTE DE DEPLOYMENT - STAGE"
                     echo "========================================="
                     echo ""
                     
                     echo "📦 Deployments:"
-                    $KUBECTL_CMD get deployments -n ecommerce
+                    kubectl get deployments -n ecommerce
                     echo ""
                     
                     echo "🎯 Services:"
-                    $KUBECTL_CMD get services -n ecommerce
+                    kubectl get services -n ecommerce
                     echo ""
                     
                     echo "🐳 Pods:"
-                    $KUBECTL_CMD get pods -n ecommerce
+                    kubectl get pods -n ecommerce
                     echo ""
                     
                     echo "📡 Endpoints de los servicios:"
@@ -563,20 +574,14 @@ EOF
         failure {
             echo '❌ Pipeline falló. Revisando estado...'
             sh '''
-                # Determinar comando kubectl correcto
-                KUBECTL_CMD="kubectl"
-                if ! kubectl version --client > /dev/null 2>&1; then
-                    KUBECTL_CMD="minikube kubectl --"
-                fi
-                
                 echo "Estado de pods en ecommerce namespace:"
-                $KUBECTL_CMD get pods -n ecommerce || true
+                kubectl get pods -n ecommerce || true
                 
                 echo ""
                 echo "Logs de pods con problemas:"
-                $KUBECTL_CMD get pods -n ecommerce -o json | jq -r '.items[] | select(.status.phase != "Running") | .metadata.name' | while read pod; do
+                kubectl get pods -n ecommerce -o json | jq -r '.items[] | select(.status.phase != "Running") | .metadata.name' | while read pod; do
                     echo "=== Logs de $pod ==="
-                    $KUBECTL_CMD logs $pod -n ecommerce --tail=50 || true
+                    kubectl logs $pod -n ecommerce --tail=50 || true
                 done
             '''
         }
