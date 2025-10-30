@@ -20,65 +20,109 @@ pipeline {
             }
         }
         
-        stage('🏗️ Build & Test - Fase 1') {
-            parallel {
-                stage('user-service') {
+        stage('⚙️ Bootstrap api-gateway & proxy-client') {
+            stages {
+                stage('Build api-gateway') {
+                    steps {
+                        echo '🔨 Construyendo api-gateway...'
+                        dir('api-gateway') {
+                            sh 'mvn clean package -DskipTests'
+                        }
+                    }
+                }
+                stage('Docker Build api-gateway') {
+                    steps {
+                        echo '🐳 Construyendo imagen Docker de api-gateway...'
+                        dir('api-gateway') {
+                            sh '''
+                                docker build -t api-gateway:latest .
+                                docker tag api-gateway:latest api-gateway:${BUILD_NUMBER}
+                                docker save api-gateway:latest | docker exec -i minikube docker load
+                            '''
+                        }
+                    }
+                }
+                stage('Build proxy-client') {
+                    steps {
+                        echo '🔨 Construyendo proxy-client...'
+                        dir('proxy-client') {
+                            sh 'mvn clean package -DskipTests'
+                        }
+                    }
+                }
+                stage('Docker Build proxy-client') {
+                    steps {
+                        echo '🐳 Construyendo imagen Docker de proxy-client...'
+                        dir('proxy-client') {
+                            sh '''
+                                docker build -t proxy-client:latest .
+                                docker tag proxy-client:latest proxy-client:${BUILD_NUMBER}
+                                docker save proxy-client:latest | docker exec -i minikube docker load
+                            '''
+                        }
+                    }
+                }
+                stage('Deploy api-gateway & proxy-client to k8s (if manifests exist)') {
+                    steps {
+                        echo '☸️ Desplegando api-gateway y proxy-client (si hay manifests)...'
+                        sh '''
+                            kubectl get namespace ecommerce || kubectl create namespace ecommerce
+                            if [ -f k8s/api-gateway-deployment.yaml ]; then
+                                kubectl apply -f k8s/api-gateway-deployment.yaml -n ecommerce
+                                kubectl wait --for=condition=available --timeout=120s deployment/api-gateway -n ecommerce || true
+                            else
+                                echo "⚠️ No se encontró k8s/api-gateway-deployment.yaml — omitiendo apply"
+                            fi
+
+                            if [ -f k8s/proxy-client-deployment.yaml ]; then
+                                kubectl apply -f k8s/proxy-client-deployment.yaml -n ecommerce
+                                kubectl wait --for=condition=available --timeout=120s deployment/proxy-client -n ecommerce || true
+                            else
+                                echo "⚠️ No se encontró k8s/proxy-client-deployment.yaml — omitiendo apply"
+                            fi
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('🏗️ Build & Test Services (ordered)') {
+            stages {
+                stage('shipping-service') {
                     stages {
-                        stage('Build user-service') {
+                        stage('Build shipping-service') {
                             steps {
-                                echo '🔨 Construyendo user-service...'
-                                dir('user-service') {
-                                    sh 'mvn clean package -DskipTests'
-                                }
+                                echo '🔨 Construyendo shipping-service...'
+                                dir('shipping-service') { sh 'mvn clean package -DskipTests' }
                             }
                         }
-                        stage('Test user-service') {
-                            steps {
-                                echo '🧪 Ejecutando tests de user-service...'
-                                dir('user-service') {
-                                    sh 'mvn test || true'
-                                }
-                            }
+                        stage('Test shipping-service') {
+                            steps { dir('shipping-service') { sh 'mvn test || true' } }
                         }
-                        stage('Docker Build user-service') {
+                        stage('Docker Build shipping-service') {
                             steps {
-                                echo '🐳 Construyendo imagen Docker de user-service...'
-                                dir('user-service') {
+                                dir('shipping-service') {
                                     sh '''
-                                        # Build image
-                                        docker build -t user-service:latest .
-                                        docker tag user-service:latest user-service:${BUILD_NUMBER}
-                                        
-                                        # Load into minikube via SSH
-                                        docker save user-service:latest | docker exec -i minikube docker load
+                                        docker build -t shipping-service:latest .
+                                        docker tag shipping-service:latest shipping-service:${BUILD_NUMBER}
+                                        docker save shipping-service:latest | docker exec -i minikube docker load
                                     '''
                                 }
                             }
                         }
                     }
                 }
-                
+
                 stage('product-service') {
                     stages {
                         stage('Build product-service') {
-                            steps {
-                                echo '🔨 Construyendo product-service...'
-                                dir('product-service') {
-                                    sh 'mvn clean package -DskipTests'
-                                }
-                            }
+                            steps { dir('product-service') { sh 'mvn clean package -DskipTests' } }
                         }
                         stage('Test product-service') {
-                            steps {
-                                echo '🧪 Ejecutando tests de product-service...'
-                                dir('product-service') {
-                                    sh 'mvn test || true'
-                                }
-                            }
+                            steps { dir('product-service') { sh 'mvn test || true' } }
                         }
                         stage('Docker Build product-service') {
                             steps {
-                                echo '🐳 Construyendo imagen Docker de product-service...'
                                 dir('product-service') {
                                     sh '''
                                         docker build -t product-service:latest .
@@ -90,102 +134,17 @@ pipeline {
                         }
                     }
                 }
-            }
-        }
-        
-        stage('🏗️ Build & Test - Fase 2') {
-            parallel {
-                stage('favourite-service') {
-                    stages {
-                        stage('Build favourite-service') {
-                            steps {
-                                echo '🔨 Construyendo favourite-service...'
-                                dir('favourite-service') {
-                                    sh 'mvn clean package -DskipTests'
-                                }
-                            }
-                        }
-                        stage('Test favourite-service') {
-                            steps {
-                                echo '🧪 Ejecutando tests de favourite-service...'
-                                dir('favourite-service') {
-                                    sh 'mvn test || true'
-                                }
-                            }
-                        }
-                        stage('Docker Build favourite-service') {
-                            steps {
-                                echo '🐳 Construyendo imagen Docker de favourite-service...'
-                                dir('favourite-service') {
-                                    sh '''
-                                        docker build -t favourite-service:latest .
-                                        docker tag favourite-service:latest favourite-service:${BUILD_NUMBER}
-                                        docker save favourite-service:latest | docker exec -i minikube docker load
-                                    '''
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                stage('order-service') {
-                    stages {
-                        stage('Build order-service') {
-                            steps {
-                                echo '🔨 Construyendo order-service...'
-                                dir('order-service') {
-                                    sh 'mvn clean package -DskipTests'
-                                }
-                            }
-                        }
-                        stage('Test order-service') {
-                            steps {
-                                echo '🧪 Ejecutando tests de order-service...'
-                                dir('order-service') {
-                                    sh 'mvn test || true'
-                                }
-                            }
-                        }
-                        stage('Docker Build order-service') {
-                            steps {
-                                echo '🐳 Construyendo imagen Docker de order-service...'
-                                dir('order-service') {
-                                    sh '''
-                                        docker build -t order-service:latest .
-                                        docker tag order-service:latest order-service:${BUILD_NUMBER}
-                                        docker save order-service:latest | docker exec -i minikube docker load
-                                    '''
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        
-        stage('🏗️ Build & Test - Fase 3') {
-            parallel {
+
                 stage('payment-service') {
                     stages {
                         stage('Build payment-service') {
-                            steps {
-                                echo '🔨 Construyendo payment-service...'
-                                dir('payment-service') {
-                                    sh 'mvn clean package -DskipTests'
-                                }
-                            }
+                            steps { dir('payment-service') { sh 'mvn clean package -DskipTests' } }
                         }
                         stage('Test payment-service') {
-                            steps {
-                                echo '🧪 Ejecutando tests de payment-service...'
-                                dir('payment-service') {
-                                    sh 'mvn test || true'
-                                }
-                            }
+                            steps { dir('payment-service') { sh 'mvn test || true' } }
                         }
                         stage('Docker Build payment-service') {
                             steps {
-                                echo '🐳 Construyendo imagen Docker de payment-service...'
                                 dir('payment-service') {
                                     sh '''
                                         docker build -t payment-service:latest .
@@ -197,33 +156,44 @@ pipeline {
                         }
                     }
                 }
-                
-                stage('shipping-service') {
+
+                stage('favourite-service') {
                     stages {
-                        stage('Build shipping-service') {
-                            steps {
-                                echo '🔨 Construyendo shipping-service...'
-                                dir('shipping-service') {
-                                    sh 'mvn clean package -DskipTests'
-                                }
-                            }
+                        stage('Build favourite-service') {
+                            steps { dir('favourite-service') { sh 'mvn clean package -DskipTests' } }
                         }
-                        stage('Test shipping-service') {
-                            steps {
-                                echo '🧪 Ejecutando tests de shipping-service...'
-                                dir('shipping-service') {
-                                    sh 'mvn test || true'
-                                }
-                            }
+                        stage('Test favourite-service') {
+                            steps { dir('favourite-service') { sh 'mvn test || true' } }
                         }
-                        stage('Docker Build shipping-service') {
+                        stage('Docker Build favourite-service') {
                             steps {
-                                echo '🐳 Construyendo imagen Docker de shipping-service...'
-                                dir('shipping-service') {
+                                dir('favourite-service') {
                                     sh '''
-                                        docker build -t shipping-service:latest .
-                                        docker tag shipping-service:latest shipping-service:${BUILD_NUMBER}
-                                        docker save shipping-service:latest | docker exec -i minikube docker load
+                                        docker build -t favourite-service:latest .
+                                        docker tag favourite-service:latest favourite-service:${BUILD_NUMBER}
+                                        docker save favourite-service:latest | docker exec -i minikube docker load
+                                    '''
+                                }
+                            }
+                        }
+                    }
+                }
+
+                stage('user-service') {
+                    stages {
+                        stage('Build user-service') {
+                            steps { dir('user-service') { sh 'mvn clean package -DskipTests' } }
+                        }
+                        stage('Test user-service') {
+                            steps { dir('user-service') { sh 'mvn test || true' } }
+                        }
+                        stage('Docker Build user-service') {
+                            steps {
+                                dir('user-service') {
+                                    sh '''
+                                        docker build -t user-service:latest .
+                                        docker tag user-service:latest user-service:${BUILD_NUMBER}
+                                        docker save user-service:latest | docker exec -i minikube docker load
                                     '''
                                 }
                             }
