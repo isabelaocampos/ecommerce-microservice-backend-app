@@ -7,7 +7,7 @@ pipeline {
     
     environment {
         JAVA_HOME = '/opt/jdk-11.0.2'
-        MAVEN_OPTS = '-Dmaven.test.failure.ignore=true'
+    MAVEN_OPTS = '-Dmaven.test.failure.ignore=true -Dhttps.protocols=TLSv1.2'
         MINIKUBE_IP = sh(script: 'kubectl config view -o jsonpath=\'{.clusters[0].cluster.server}\' | sed \'s|https://||;s|:.*||\'', returnStdout: true).trim()
         DOCKER_BUILDKIT = '1'
     }
