@@ -9,6 +9,7 @@ pipeline {
         JAVA_HOME = '/opt/jdk-11.0.2'
         MAVEN_OPTS = '-Dmaven.test.failure.ignore=true'
         MINIKUBE_IP = sh(script: 'kubectl config view -o jsonpath=\'{.clusters[0].cluster.server}\' | sed \'s|https://||;s|:.*||\'', returnStdout: true).trim()
+        KUBECONFIG = "/tmp/kubeconfig-jenkins-${BUILD_NUMBER}"
     }
     
     stages {
@@ -16,6 +17,13 @@ pipeline {
             steps {
                 echo '⚙️ Configurando acceso a Kubernetes/Minikube...'
                 sh '''
+                    # Crear KUBECONFIG para este build
+                    minikube kubectl -- config view --flatten > ${KUBECONFIG}
+                    chmod 600 ${KUBECONFIG}
+                    
+                    echo "✅ KUBECONFIG creado en: ${KUBECONFIG}"
+                    ls -lh ${KUBECONFIG}
+                    
                     # Crear un script wrapper para kubectl que use minikube
                     cat > /tmp/kubectl-wrapper-${BUILD_NUMBER}.sh << 'WRAPPER_EOF'
 #!/bin/bash
@@ -35,20 +43,25 @@ WRAPPER_EOF
                     minikube kubectl -- version --client || echo "⚠️ Cliente kubectl disponible"
                     minikube kubectl -- cluster-info || echo "⚠️ Esperando cluster..."
                     
+                    # Verificar que podemos usar kubectl con el KUBECONFIG
+                    export KUBECONFIG=${KUBECONFIG}
+                    kubectl version --client
+                    kubectl cluster-info
+                    
                     echo "✅ Wrapper de kubectl configurado"
                     echo "export PATH=/tmp:\$PATH" > /tmp/kubectl-env-${BUILD_NUMBER}
                 '''
             }
         }
         
-        stage('🔍 Checkout') {
+        stage('📂 Checkout') {
             steps {
                 echo '📥 Clonando repositorio...'
                 checkout scm
             }
         }
         
-        stage('🏗️ Build & Test - Fase 1') {
+        stage('🗃️ Build & Test - Fase 1') {
             parallel {
                 stage('user-service') {
                     stages {
@@ -121,7 +134,7 @@ WRAPPER_EOF
             }
         }
         
-        stage('🏗️ Build & Test - Fase 2') {
+        stage('🗃️ Build & Test - Fase 2') {
             parallel {
                 stage('favourite-service') {
                     stages {
@@ -191,7 +204,7 @@ WRAPPER_EOF
             }
         }
         
-        stage('🏗️ Build & Test - Fase 3') {
+        stage('🗃️ Build & Test - Fase 3') {
             parallel {
                 stage('payment-service') {
                     stages {
@@ -281,18 +294,15 @@ WRAPPER_EOF
             steps {
                 echo '☸️ Desplegando microservicios en Kubernetes...'
                 sh '''
-                    # Configurar KUBECONFIG explícitamente
-                    export KUBECONFIG=/tmp/kubeconfig-jenkins-${BUILD_NUMBER}
-                    
                     # Verificar que el archivo existe
-                    if [ ! -f "$KUBECONFIG" ]; then
-                        echo "❌ Error: KUBECONFIG no encontrado en $KUBECONFIG"
+                    if [ ! -f "${KUBECONFIG}" ]; then
+                        echo "❌ Error: KUBECONFIG no encontrado en ${KUBECONFIG}"
                         echo "Archivos en /tmp:"
                         ls -la /tmp/kubeconfig* || true
                         exit 1
                     fi
                     
-                    echo "✅ Usando KUBECONFIG: $KUBECONFIG"
+                    echo "✅ Usando KUBECONFIG: ${KUBECONFIG}"
                     
                     # Crear namespace si no existe
                     kubectl get namespace ecommerce || kubectl create namespace ecommerce
@@ -326,9 +336,6 @@ WRAPPER_EOF
             steps {
                 echo '⏰ Esperando que los pods estén listos...'
                 sh '''
-                    # Configurar KUBECONFIG explícitamente
-                    export KUBECONFIG=/tmp/kubeconfig-jenkins-${BUILD_NUMBER}
-                    
                     echo "Esperando user-service..."
                     kubectl wait --for=condition=available --timeout=120s deployment/user-service -n ecommerce || true
                     
@@ -360,7 +367,6 @@ WRAPPER_EOF
                     steps {
                         echo '🔍 Verificando user-service en Kubernetes...'
                         sh '''
-                            export KUBECONFIG=/tmp/kubeconfig-jenkins-${BUILD_NUMBER}
                             MINIKUBE_IP=$(minikube ip)
                             SERVICE_URL="http://${MINIKUBE_IP}:30700"
                             
@@ -496,9 +502,6 @@ WRAPPER_EOF
             steps {
                 echo '📋 Generando reporte del deployment...'
                 sh '''
-                    # Configurar KUBECONFIG explícitamente
-                    export KUBECONFIG=/tmp/kubeconfig-jenkins-${BUILD_NUMBER}
-                    
                     echo "========================================="
                     echo "    REPORTE DE DEPLOYMENT - STAGE"
                     echo "========================================="
@@ -545,10 +548,7 @@ WRAPPER_EOF
         failure {
             echo '❌ Pipeline falló. Revisando estado...'
             sh '''
-                # Configurar KUBECONFIG si existe
-                export KUBECONFIG=/tmp/kubeconfig-jenkins-${BUILD_NUMBER}
-                
-                if [ -f "$KUBECONFIG" ]; then
+                if [ -f "${KUBECONFIG}" ]; then
                     echo "Estado de pods en ecommerce namespace:"
                     kubectl get pods -n ecommerce || true
                     
@@ -566,9 +566,11 @@ WRAPPER_EOF
         always {
             echo '🏁 Pipeline finalizado'
             sh '''
-                # Limpiar archivo temporal de configuración
+                # Limpiar archivos temporales de configuración
                 rm -f /tmp/kubectl-env-${BUILD_NUMBER}
-                rm -f /tmp/kubeconfig-jenkins-${BUILD_NUMBER}
+                rm -f /tmp/kubectl-wrapper-${BUILD_NUMBER}.sh
+                rm -f /tmp/kubectl-${BUILD_NUMBER}
+                rm -f ${KUBECONFIG}
             '''
             // Archivar resultados de tests
             junit allowEmptyResults: true, testResults: '**/target/surefire-reports/*.xml'
