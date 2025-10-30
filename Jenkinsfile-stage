@@ -44,14 +44,14 @@ pipeline {
                             steps {
                                 echo '🐳 Construyendo imagen Docker de user-service...'
                                 dir('user-service') {
-                                    sh '''
-                                        # Build image
-                                        docker build -t user-service:latest .
-                                        docker tag user-service:latest user-service:${BUILD_NUMBER}
-                                        
-                                        # Load into minikube via SSH
-                                        docker save user-service:latest | minikube ssh --native-ssh=false "docker load"
-                                    '''
+                                    script {
+                                        // Use a Docker image with docker CLI and mount host docker socket
+                                        docker.image('docker:24-dind').inside('-v /var/run/docker.sock:/var/run/docker.sock --privileged') {
+                                            sh 'docker build -t user-service:latest .'
+                                            sh 'docker tag user-service:latest user-service:${BUILD_NUMBER}'
+                                            sh 'docker save user-service:latest | minikube ssh --native-ssh=false "docker load"'
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -80,11 +80,13 @@ pipeline {
                             steps {
                                 echo '🐳 Construyendo imagen Docker de product-service...'
                                 dir('product-service') {
-                                    sh '''
-                                        docker build -t product-service:latest .
-                                        docker tag product-service:latest product-service:${BUILD_NUMBER}
-                                        docker save product-service:latest | minikube ssh --native-ssh=false "docker load"
-                                    '''
+                                    script {
+                                        docker.image('docker:24-dind').inside('-v /var/run/docker.sock:/var/run/docker.sock --privileged') {
+                                            sh 'docker build -t product-service:latest .'
+                                            sh 'docker tag product-service:latest product-service:${BUILD_NUMBER}'
+                                            sh 'docker save product-service:latest | minikube ssh --native-ssh=false "docker load"'
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -117,11 +119,13 @@ pipeline {
                             steps {
                                 echo '🐳 Construyendo imagen Docker de favourite-service...'
                                 dir('favourite-service') {
-                                    sh '''
-                                        docker build -t favourite-service:latest .
-                                        docker tag favourite-service:latest favourite-service:${BUILD_NUMBER}
-                                        docker save favourite-service:latest | minikube ssh --native-ssh=false "docker load"
-                                    '''
+                                    script {
+                                        docker.image('docker:24-dind').inside('-v /var/run/docker.sock:/var/run/docker.sock --privileged') {
+                                            sh 'docker build -t favourite-service:latest .'
+                                            sh 'docker tag favourite-service:latest favourite-service:${BUILD_NUMBER}'
+                                            sh 'docker save favourite-service:latest | minikube ssh --native-ssh=false "docker load"'
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -150,11 +154,13 @@ pipeline {
                             steps {
                                 echo '🐳 Construyendo imagen Docker de order-service...'
                                 dir('order-service') {
-                                    sh '''
-                                        docker build -t order-service:latest .
-                                        docker tag order-service:latest order-service:${BUILD_NUMBER}
-                                        docker save order-service:latest | minikube ssh --native-ssh=false "docker load"
-                                    '''
+                                    script {
+                                        docker.image('docker:24-dind').inside('-v /var/run/docker.sock:/var/run/docker.sock --privileged') {
+                                            sh 'docker build -t order-service:latest .'
+                                            sh 'docker tag order-service:latest order-service:${BUILD_NUMBER}'
+                                            sh 'docker save order-service:latest | minikube ssh --native-ssh=false "docker load"'
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -187,11 +193,13 @@ pipeline {
                             steps {
                                 echo '🐳 Construyendo imagen Docker de payment-service...'
                                 dir('payment-service') {
-                                    sh '''
-                                        docker build -t payment-service:latest .
-                                        docker tag payment-service:latest payment-service:${BUILD_NUMBER}
-                                        docker save payment-service:latest | minikube ssh --native-ssh=false "docker load"
-                                    '''
+                                    script {
+                                        docker.image('docker:24-dind').inside('-v /var/run/docker.sock:/var/run/docker.sock --privileged') {
+                                            sh 'docker build -t payment-service:latest .'
+                                            sh 'docker tag payment-service:latest payment-service:${BUILD_NUMBER}'
+                                            sh 'docker save payment-service:latest | minikube ssh --native-ssh=false "docker load"'
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -220,11 +228,13 @@ pipeline {
                             steps {
                                 echo '🐳 Construyendo imagen Docker de shipping-service...'
                                 dir('shipping-service') {
-                                    sh '''
-                                        docker build -t shipping-service:latest .
-                                        docker tag shipping-service:latest shipping-service:${BUILD_NUMBER}
-                                        docker save shipping-service:latest | minikube ssh --native-ssh=false "docker load"
-                                    '''
+                                    script {
+                                        docker.image('docker:24-dind').inside('-v /var/run/docker.sock:/var/run/docker.sock --privileged') {
+                                            sh 'docker build -t shipping-service:latest .'
+                                            sh 'docker tag shipping-service:latest shipping-service:${BUILD_NUMBER}'
+                                            sh 'docker save shipping-service:latest | minikube ssh --native-ssh=false "docker load"'
+                                        }
+                                    }
                                 }
                             }
                         }
