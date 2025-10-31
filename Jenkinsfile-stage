@@ -14,43 +14,50 @@ pipeline {
     stages {
         stage('🔧 Configurar Kubernetes') {
             steps {
-                echo '⚙️ Configurando acceso a Kubernetes/Minikube...'
+                echo '⚙️ Configurando acceso a Kubernetes con Service Account Token...'
                 sh '''
-                    # Eliminar kubeconfig corrupto y crear uno limpio
+                    # Limpiar configuración anterior
                     echo "🗑️ Limpiando configuración anterior..."
-                    rm -rf /var/jenkins_home/.kube/config 2>/dev/null || true
-                    mkdir -p /var/jenkins_home/.kube
+                    rm -rf ~/.kube/config 2>/dev/null || true
+                    mkdir -p ~/.kube
                     
-                    # Obtener IP de Minikube
+                    # Obtener información del cluster
                     MINIKUBE_IP=$(minikube ip 2>/dev/null || echo "192.168.49.2")
-                    echo "📍 Minikube IP: ${MINIKUBE_IP}"
+                    K8S_SERVER="https://${MINIKUBE_IP}:8443"
                     
-                    # Crear un kubeconfig mínimo y funcional
-                    echo "🔑 Creando configuración de Kubernetes limpia..."
-                    cat > /var/jenkins_home/.kube/config << EOF
+                    echo "📍 Kubernetes API Server: ${K8S_SERVER}"
+                    
+                    # Crear kubeconfig usando token de service account
+                    cat > ~/.kube/config << EOF
 apiVersion: v1
 kind: Config
 clusters:
 - cluster:
     insecure-skip-tls-verify: true
-    server: https://${MINIKUBE_IP}:8443
+    server: ${K8S_SERVER}
   name: minikube
 contexts:
 - context:
     cluster: minikube
-    user: minikube
+    user: jenkins-sa
+    namespace: ecommerce
   name: minikube
 current-context: minikube
 users:
-- name: minikube
-  user: {}
+- name: jenkins-sa
+  user:
+    token: ${K8S_TOKEN}
 EOF
                     
-                    chmod 600 /var/jenkins_home/.kube/config 2>/dev/null || true
+                    chmod 600 ~/.kube/config
                     
-                    echo "✅ Configuración creada"
-                    echo "🔌 Verificando acceso a Kubernetes..."
-                    minikube kubectl -- version --client || echo "Cliente kubectl OK"
+                    echo "✅ Kubeconfig creado con token"
+                    
+                    # Verificar conexión
+                    echo "🔌 Verificando conexión al cluster..."
+                    kubectl version --client
+                    kubectl cluster-info || echo "⚠️ Esperando conexión..."
+                    kubectl get nodes || echo "⚠️ Verificando nodos..."
                 '''
             }
         }
@@ -365,11 +372,11 @@ EOF
             steps {
                 echo '☸️ Desplegando microservicios en Kubernetes...'
                 sh '''
-                    # Usar minikube kubectl directamente - SIN usar kubectl normal
-                    echo "🔧 Usando: minikube kubectl"
+                    # Ahora kubectl usará el token configurado
+                    echo "🔧 Usando kubectl con Service Account Token"
                     
                     # Crear namespace si no existe
-                    minikube kubectl -- get namespace ecommerce || minikube kubectl -- create namespace ecommerce
+                    kubectl get namespace ecommerce || kubectl create namespace ecommerce
                     
                     # Aplicar deployments de microservicios
                     echo "🔌 Desplegando user-service..."
@@ -408,32 +415,32 @@ EOF
                 echo '⏰ Esperando que los pods estén listos...'
                 sh '''
                     echo "Esperando user-service..."
-                    minikube kubectl -- wait --for=condition=available --timeout=120s deployment/user-service -n ecommerce || true
+                    kubectl wait --for=condition=available --timeout=120s deployment/user-service -n ecommerce || true
                     
                     echo "Esperando product-service..."
-                    minikube kubectl -- wait --for=condition=available --timeout=120s deployment/product-service -n ecommerce || true
+                    kubectl wait --for=condition=available --timeout=120s deployment/product-service -n ecommerce || true
                     
                     echo "Esperando favourite-service..."
-                    minikube kubectl -- wait --for=condition=available --timeout=120s deployment/favourite-service -n ecommerce || true
+                    kubectl wait --for=condition=available --timeout=120s deployment/favourite-service -n ecommerce || true
                     
                     echo "Esperando order-service..."
-                    minikube kubectl -- wait --for=condition=available --timeout=120s deployment/order-service -n ecommerce || true
+                    kubectl wait --for=condition=available --timeout=120s deployment/order-service -n ecommerce || true
                     
                     echo "Esperando payment-service..."
-                    minikube kubectl -- wait --for=condition=available --timeout=120s deployment/payment-service -n ecommerce || true
+                    kubectl wait --for=condition=available --timeout=120s deployment/payment-service -n ecommerce || true
                     
                     echo "Esperando shipping-service..."
-                    minikube kubectl -- wait --for=condition=available --timeout=120s deployment/shipping-service -n ecommerce || true
+                    kubectl wait --for=condition=available --timeout=120s deployment/shipping-service -n ecommerce || true
                     
                     echo "Esperando api-gateway..."
-                    minikube kubectl -- wait --for=condition=available --timeout=120s deployment/api-gateway -n ecommerce || true
+                    kubectl wait --for=condition=available --timeout=120s deployment/api-gateway -n ecommerce || true
                     
                     echo "Esperando proxy..."
-                    minikube kubectl -- wait --for=condition=available --timeout=120s deployment/proxy -n ecommerce || true
+                    kubectl wait --for=condition=available --timeout=120s deployment/proxy -n ecommerce || true
                     
                     echo ""
                     echo "Estado de los pods:"
-                    minikube kubectl -- get pods -n ecommerce
+                    kubectl get pods -n ecommerce
                 '''
             }
         }
