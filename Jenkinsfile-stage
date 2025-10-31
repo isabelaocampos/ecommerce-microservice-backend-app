@@ -317,32 +317,32 @@ EOF
                     }
                 }
                 
-                stage('proxy') {
+                stage('proxy-client') {
                     stages {
-                        stage('Build proxy') {
+                        stage('Build proxy-client') {
                             steps {
-                                echo '🔨 Construyendo proxy...'
-                                dir('proxy') {
+                                echo '🔨 Construyendo proxy-client...'
+                                dir('proxy-client') {
                                     sh 'mvn clean package -DskipTests'
                                 }
                             }
                         }
-                        stage('Test proxy') {
+                        stage('Test proxy-client') {
                             steps {
-                                echo '🧪 Ejecutando tests de proxy...'
-                                dir('proxy') {
+                                echo '🧪 Ejecutando tests de proxy-client...'
+                                dir('proxy-client') {
                                     sh 'mvn test || true'
                                 }
                             }
                         }
-                        stage('Docker Build proxy') {
+                        stage('Docker Build proxy-client') {
                             steps {
-                                echo '🐳 Construyendo imagen Docker de proxy en Minikube...'
-                                dir('proxy') {
+                                echo '🐳 Construyendo imagen Docker de proxy-client en Minikube...'
+                                dir('proxy-client') {
                                     sh '''
-                                        minikube image build -t proxy:latest .
-                                        minikube image build -t proxy:${BUILD_NUMBER} .
-                                        minikube image ls | grep proxy || echo "Imagen creada"
+                                        minikube image build -t proxy-client:latest .
+                                        minikube image build -t proxy-client:${BUILD_NUMBER} .
+                                        minikube image ls | grep proxy-client || echo "Imagen creada"
                                     '''
                                 }
                             }
@@ -363,7 +363,7 @@ EOF
                     
                     echo ""
                     echo "=== Docker Images en Minikube ==="
-                    minikube image ls | grep -E "(user-service|product-service|favourite-service|order-service|payment-service|shipping-service|api-gateway|proxy)" || echo "Verificando imágenes..."
+                    minikube image ls | grep -E "(user-service|product-service|favourite-service|order-service|payment-service|shipping-service|api-gateway|proxy-client)" || echo "Verificando imágenes..."
                 '''
             }
         }
@@ -401,8 +401,8 @@ EOF
                     echo "🌐 Desplegando api-gateway..."
                     minikube kubectl -- apply -f k8s/api-gateway-deployment.yaml
                     
-                    echo "🔀 Desplegando proxy..."
-                    minikube kubectl -- apply -f k8s/proxy-deployment.yaml
+                    echo "🔀 Desplegando proxy-client..."
+                    minikube kubectl -- apply -f k8s/proxy-client-deployment.yaml
                     
                     echo ""
                     echo "✅ Deployments aplicados"
@@ -435,8 +435,8 @@ EOF
                     echo "Esperando api-gateway..."
                     kubectl wait --for=condition=available --timeout=120s deployment/api-gateway -n ecommerce || true
                     
-                    echo "Esperando proxy..."
-                    kubectl wait --for=condition=available --timeout=120s deployment/proxy -n ecommerce || true
+                    echo "Esperando proxy-client..."
+                    kubectl wait --for=condition=available --timeout=120s deployment/proxy-client -n ecommerce || true
                     
                     echo ""
                     echo "Estado de los pods:"
@@ -602,24 +602,32 @@ EOF
                     }
                 }
                 
-                stage('Test proxy en K8s') {
+                stage('Test proxy-client en K8s') {
                     steps {
-                        echo '🔍 Verificando proxy en Kubernetes...'
+                        echo '🔍 Verificando proxy-client en Kubernetes...'
                         sh '''
-                            MINIKUBE_IP=$(minikube ip)
-                            SERVICE_URL="http://${MINIKUBE_IP}:30200"
-                            
-                            echo "Testeando: ${SERVICE_URL}/actuator/health"
-                            
+                            # Usar port-forward para exponer el service proxy-client localmente en el puerto 30200
+                            echo "Creando port-forward de proxy-client svc: 30200 -> 8900"
+                            kubectl -n ecommerce port-forward svc/proxy-client 30200:8900 >/tmp/port-forward-proxy-client.log 2>&1 &
+                            PF=$!
+                            # Dar tiempo para que el port-forward se establezca
+                            sleep 2
+
+                            SERVICE_URL="http://127.0.0.1:30200"
+                            echo "Testeando: ${SERVICE_URL}/app/actuator/health"
+
                             for i in {1..30}; do
-                                if curl -s -f "${SERVICE_URL}/actuator/health" > /dev/null 2>&1; then
-                                    echo "✅ proxy está respondiendo"
-                                    curl -s "${SERVICE_URL}/actuator/health" | grep -q "UP" && echo "✅ Health check OK"
+                                if curl -s -f "${SERVICE_URL}/app/actuator/health" > /dev/null 2>&1; then
+                                    echo "✅ proxy-client está respondiendo"
+                                    curl -s "${SERVICE_URL}/app/actuator/health" | grep -q "UP" && echo "✅ Health check OK"
                                     break
                                 fi
-                                echo "Intento $i/30 - Esperando proxy..."
+                                echo "Intento $i/30 - Esperando proxy-client..."
                                 sleep 5
                             done
+
+                            # Limpiar port-forward
+                            kill $PF || true
                         '''
                     }
                 }
@@ -650,7 +658,7 @@ EOF
                     echo "📡 Endpoints de los servicios:"
                     MINIKUBE_IP=$(minikube ip)
                     echo "  🌐 API Gateway:      http://${MINIKUBE_IP}:30100"
-                    echo "  🔀 Proxy:            http://${MINIKUBE_IP}:30200"
+                    echo "  🔀 Proxy-client:     http://127.0.0.1:30200 (port-forward)"
                     echo "  👤 user-service:     http://${MINIKUBE_IP}:30700"
                     echo "  📦 product-service:  http://${MINIKUBE_IP}:30500"
                     echo "  ❤️  favourite-service: http://${MINIKUBE_IP}:30800"
