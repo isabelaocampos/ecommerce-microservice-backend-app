@@ -296,32 +296,32 @@ WRAPPER_EOF
                     }
                 }
                 
-                stage('proxy') {
+                stage('proxy-client') {
                     stages {
-                        stage('Build proxy') {
+                        stage('Build proxy-client') {
                             steps {
-                                echo '🔨 Construyendo proxy...'
-                                dir('proxy') {
+                                echo '🔨 Construyendo proxy-client...'
+                                dir('proxy-client') {
                                     sh 'mvn clean package -DskipTests'
                                 }
                             }
                         }
-                        stage('Test proxy') {
+                        stage('Test proxy-client') {
                             steps {
-                                echo '🧪 Ejecutando tests de proxy...'
-                                dir('proxy') {
+                                echo '🧪 Ejecutando tests de proxy-client...'
+                                dir('proxy-client') {
                                     sh 'mvn test || true'
                                 }
                             }
                         }
-                        stage('Docker Build proxy') {
+                        stage('Docker Build proxy-client') {
                             steps {
-                                echo '🐳 Construyendo imagen Docker de proxy en Minikube...'
-                                dir('proxy') {
+                                echo '🐳 Construyendo imagen Docker de proxy-client en Minikube...'
+                                dir('proxy-client') {
                                     sh '''
-                                        minikube image build -t proxy:latest .
-                                        minikube image build -t proxy:${BUILD_NUMBER} .
-                                        minikube image ls | grep proxy || echo "Imagen creada"
+                                        minikube image build -t proxy-client:latest .
+                                        minikube image build -t proxy-client:${BUILD_NUMBER} .
+                                        minikube image ls | grep proxy-client || echo "Imagen creada"
                                     '''
                                 }
                             }
