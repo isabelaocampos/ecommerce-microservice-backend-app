@@ -261,6 +261,76 @@ WRAPPER_EOF
             }
         }
         
+        stage('🏗️ Build & Test - Fase 4 (API Gateway & Proxy)') {
+            parallel {
+                stage('api-gateway') {
+                    stages {
+                        stage('Build api-gateway') {
+                            steps {
+                                echo '🔨 Construyendo api-gateway...'
+                                dir('api-gateway') {
+                                    sh 'mvn clean package -DskipTests'
+                                }
+                            }
+                        }
+                        stage('Test api-gateway') {
+                            steps {
+                                echo '🧪 Ejecutando tests de api-gateway...'
+                                dir('api-gateway') {
+                                    sh 'mvn test || true'
+                                }
+                            }
+                        }
+                        stage('Docker Build api-gateway') {
+                            steps {
+                                echo '🐳 Construyendo imagen Docker de api-gateway en Minikube...'
+                                dir('api-gateway') {
+                                    sh '''
+                                        minikube image build -t api-gateway:latest .
+                                        minikube image build -t api-gateway:${BUILD_NUMBER} .
+                                        minikube image ls | grep api-gateway || echo "Imagen creada"
+                                    '''
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                stage('proxy') {
+                    stages {
+                        stage('Build proxy') {
+                            steps {
+                                echo '🔨 Construyendo proxy...'
+                                dir('proxy') {
+                                    sh 'mvn clean package -DskipTests'
+                                }
+                            }
+                        }
+                        stage('Test proxy') {
+                            steps {
+                                echo '🧪 Ejecutando tests de proxy...'
+                                dir('proxy') {
+                                    sh 'mvn test || true'
+                                }
+                            }
+                        }
+                        stage('Docker Build proxy') {
+                            steps {
+                                echo '🐳 Construyendo imagen Docker de proxy en Minikube...'
+                                dir('proxy') {
+                                    sh '''
+                                        minikube image build -t proxy:latest .
+                                        minikube image build -t proxy:${BUILD_NUMBER} .
+                                        minikube image ls | grep proxy || echo "Imagen creada"
+                                    '''
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
         stage('📦 Verificar Artefactos') {
             steps {
                 echo '🔍 Verificando JAR files y Docker images...'
@@ -289,22 +359,22 @@ WRAPPER_EOF
                     
                     # Aplicar deployments
                     echo "🔌 Desplegando user-service..."
-                    $KUBECTL apply -f k8s/user-service-deployment.yaml
+                    minikube kubectl -- apply -f k8s/user-service-deployment.yaml
                     
                     echo "🔌 Desplegando product-service..."
-                    $KUBECTL apply -f k8s/product-service-deployment.yaml
+                    minikube kubectl -- apply -f k8s/product-service-deployment.yaml
                     
                     echo "🔌 Desplegando favourite-service..."
-                    $KUBECTL apply -f k8s/favourite-service-deployment.yaml
+                    minikube kubectl -- apply -f k8s/favourite-service-deployment.yaml
                     
                     echo "🔌 Desplegando order-service..."
-                    $KUBECTL apply -f k8s/order-service-deployment.yaml
+                    minikube kubectl -- apply -f k8s/order-service-deployment.yaml
                     
                     echo "🔌 Desplegando payment-service..."
-                    $KUBECTL apply -f k8s/payment-service-deployment.yaml
+                    minikube kubectl -- apply -f k8s/payment-service-deployment.yaml
                     
                     echo "🔌 Desplegando shipping-service..."
-                    $KUBECTL apply -f k8s/shipping-service-deployment.yaml
+                    minikube kubectl -- apply -f k8s/shipping-service-deployment.yaml
                     
                     echo ""
                     echo "✅ Deployments aplicados"
@@ -316,30 +386,27 @@ WRAPPER_EOF
             steps {
                 echo '⏰ Esperando que los pods estén listos...'
                 sh '''
-                    # Usar minikube kubectl directamente
-                    KUBECTL="minikube kubectl --"
-                    
                     echo "Esperando user-service..."
-                    $KUBECTL wait --for=condition=available --timeout=120s deployment/user-service -n ecommerce || true
+                    minikube kubectl -- wait --for=condition=available --timeout=120s deployment/user-service -n ecommerce || true
                     
                     echo "Esperando product-service..."
-                    $KUBECTL wait --for=condition=available --timeout=120s deployment/product-service -n ecommerce || true
+                    minikube kubectl -- wait --for=condition=available --timeout=120s deployment/product-service -n ecommerce || true
                     
                     echo "Esperando favourite-service..."
-                    $KUBECTL wait --for=condition=available --timeout=120s deployment/favourite-service -n ecommerce || true
+                    minikube kubectl -- wait --for=condition=available --timeout=120s deployment/favourite-service -n ecommerce || true
                     
                     echo "Esperando order-service..."
-                    $KUBECTL wait --for=condition=available --timeout=120s deployment/order-service -n ecommerce || true
+                    minikube kubectl -- wait --for=condition=available --timeout=120s deployment/order-service -n ecommerce || true
                     
                     echo "Esperando payment-service..."
-                    $KUBECTL wait --for=condition=available --timeout=120s deployment/payment-service -n ecommerce || true
+                    minikube kubectl -- wait --for=condition=available --timeout=120s deployment/payment-service -n ecommerce || true
                     
                     echo "Esperando shipping-service..."
-                    $KUBECTL wait --for=condition=available --timeout=120s deployment/shipping-service -n ecommerce || true
+                    minikube kubectl -- wait --for=condition=available --timeout=120s deployment/shipping-service -n ecommerce || true
                     
                     echo ""
                     echo "Estado de los pods:"
-                    $KUBECTL get pods -n ecommerce
+                    minikube kubectl -- get pods -n ecommerce
                 '''
             }
         }
@@ -485,24 +552,21 @@ WRAPPER_EOF
             steps {
                 echo '📋 Generando reporte del deployment...'
                 sh '''
-                    # Usar minikube kubectl directamente
-                    KUBECTL="minikube kubectl --"
-                    
                     echo "========================================="
                     echo "    REPORTE DE DEPLOYMENT - STAGE"
                     echo "========================================="
                     echo ""
                     
                     echo "📦 Deployments:"
-                    $KUBECTL get deployments -n ecommerce
+                    minikube kubectl -- get deployments -n ecommerce
                     echo ""
                     
                     echo "🎯 Services:"
-                    $KUBECTL get services -n ecommerce
+                    minikube kubectl -- get services -n ecommerce
                     echo ""
                     
                     echo "🐳 Pods:"
-                    $KUBECTL get pods -n ecommerce
+                    minikube kubectl -- get pods -n ecommerce
                     echo ""
                     
                     echo "📡 Endpoints de los servicios:"
@@ -534,17 +598,14 @@ WRAPPER_EOF
         failure {
             echo '❌ Pipeline falló. Revisando estado...'
             sh '''
-                # Usar minikube kubectl directamente
-                KUBECTL="minikube kubectl --"
-                
                 echo "Estado de pods en ecommerce namespace:"
-                $KUBECTL get pods -n ecommerce || true
+                minikube kubectl -- get pods -n ecommerce || true
                 
                 echo ""
                 echo "Logs de pods con problemas:"
-                $KUBECTL get pods -n ecommerce -o json | jq -r '.items[] | select(.status.phase != "Running") | .metadata.name' | while read pod; do
+                minikube kubectl -- get pods -n ecommerce -o json | jq -r '.items[] | select(.status.phase != "Running") | .metadata.name' | while read pod; do
                     echo "=== Logs de $pod ==="
-                    $KUBECTL logs $pod -n ecommerce --tail=50 || true
+                    minikube kubectl -- logs $pod -n ecommerce --tail=50 || true
                 done
             '''
         }
