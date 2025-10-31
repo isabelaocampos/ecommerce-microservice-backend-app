@@ -16,76 +16,27 @@ pipeline {
             steps {
                 echo '⚙️ Configurando acceso a Kubernetes/Minikube...'
                 sh '''
-                    # Usar variable de entorno KUBECONFIG en lugar de archivo permanente
-                    export KUBECONFIG=/tmp/kubeconfig-jenkins-${BUILD_NUMBER}
+                    # Crear un script wrapper para kubectl que use minikube
+                    cat > /tmp/kubectl-wrapper-${BUILD_NUMBER}.sh << 'WRAPPER_EOF'
+#!/bin/bash
+# Wrapper que usa minikube kubectl cuando sea necesario
+minikube kubectl -- "$@"
+WRAPPER_EOF
                     
-                    # Obtener IP de Minikube
-                    MINIKUBE_IP=$(minikube ip 2>/dev/null || echo "127.0.0.1")
-                    echo "📍 Minikube IP: ${MINIKUBE_IP}"
+                    chmod +x /tmp/kubectl-wrapper-${BUILD_NUMBER}.sh
                     
-                    # Crear kubeconfig temporal usando certificados de Minikube SSH
-                    echo "🔑 Extrayendo certificados desde Minikube..."
+                    # Crear alias para kubectl
+                    echo '#!/bin/bash' > /tmp/kubectl-${BUILD_NUMBER}
+                    echo 'exec minikube kubectl -- "$@"' >> /tmp/kubectl-${BUILD_NUMBER}
+                    chmod +x /tmp/kubectl-${BUILD_NUMBER}
                     
-                    # Obtener certificados via SSH de Minikube
-                    CLIENT_CERT=$(minikube ssh "sudo cat /var/lib/minikube/certs/client.crt" 2>/dev/null | base64 -w 0 || echo "")
-                    CLIENT_KEY=$(minikube ssh "sudo cat /var/lib/minikube/certs/client.key" 2>/dev/null | base64 -w 0 || echo "")
+                    # Verificar que minikube kubectl funciona
+                    echo "🔌 Verificando acceso a Kubernetes via Minikube..."
+                    minikube kubectl -- version --client || echo "⚠️ Cliente kubectl disponible"
+                    minikube kubectl -- cluster-info || echo "⚠️ Esperando cluster..."
                     
-                    if [ -z "$CLIENT_CERT" ] || [ -z "$CLIENT_KEY" ]; then
-                        echo "⚠️ No se pudieron obtener certificados via SSH, usando configuración insegura..."
-                        # Crear config con skip-tls-verify
-                        cat > ${KUBECONFIG} << 'EOF'
-apiVersion: v1
-clusters:
-- cluster:
-    insecure-skip-tls-verify: true
-    server: https://MINIKUBE_IP_PLACEHOLDER:8443
-  name: minikube
-contexts:
-- context:
-    cluster: minikube
-    user: minikube
-  name: minikube
-current-context: minikube
-kind: Config
-preferences: {}
-users:
-- name: minikube
-  user:
-    token: unused
-EOF
-                        sed -i "s|MINIKUBE_IP_PLACEHOLDER|${MINIKUBE_IP}|g" ${KUBECONFIG}
-                    else
-                        # Crear config con certificados
-                        cat > ${KUBECONFIG} << EOF
-apiVersion: v1
-clusters:
-- cluster:
-    insecure-skip-tls-verify: true
-    server: https://${MINIKUBE_IP}:8443
-  name: minikube
-contexts:
-- context:
-    cluster: minikube
-    user: minikube
-  name: minikube
-current-context: minikube
-kind: Config
-preferences: {}
-users:
-- name: minikube
-  user:
-    client-certificate-data: ${CLIENT_CERT}
-    client-key-data: ${CLIENT_KEY}
-EOF
-                    fi
-                    
-                    # Exportar para que esté disponible en siguientes stages
-                    echo "export KUBECONFIG=${KUBECONFIG}" > /tmp/kubectl-env-${BUILD_NUMBER}
-                    
-                    # Verificar configuración
-                    echo "✅ Kubeconfig temporal creado en ${KUBECONFIG}"
-                    kubectl version --client
-                    kubectl cluster-info || echo "⚠️ Cluster info no disponible, continuando..."
+                    echo "✅ Wrapper de kubectl configurado"
+                    echo "export PATH=/tmp:\$PATH" > /tmp/kubectl-env-${BUILD_NUMBER}
                 '''
             }
         }
@@ -330,27 +281,30 @@ EOF
             steps {
                 echo '☸️ Desplegando microservicios en Kubernetes...'
                 sh '''
+                    # Usar minikube kubectl directamente - SIN usar kubectl normal
+                    echo "🔧 Usando: minikube kubectl"
+                    
                     # Crear namespace si no existe
-                    kubectl get namespace ecommerce || kubectl create namespace ecommerce
+                    minikube kubectl -- get namespace ecommerce || minikube kubectl -- create namespace ecommerce
                     
                     # Aplicar deployments
                     echo "🔌 Desplegando user-service..."
-                    kubectl apply -f k8s/user-service-deployment.yaml
+                    $KUBECTL apply -f k8s/user-service-deployment.yaml
                     
                     echo "🔌 Desplegando product-service..."
-                    kubectl apply -f k8s/product-service-deployment.yaml
+                    $KUBECTL apply -f k8s/product-service-deployment.yaml
                     
                     echo "🔌 Desplegando favourite-service..."
-                    kubectl apply -f k8s/favourite-service-deployment.yaml
+                    $KUBECTL apply -f k8s/favourite-service-deployment.yaml
                     
                     echo "🔌 Desplegando order-service..."
-                    kubectl apply -f k8s/order-service-deployment.yaml
+                    $KUBECTL apply -f k8s/order-service-deployment.yaml
                     
                     echo "🔌 Desplegando payment-service..."
-                    kubectl apply -f k8s/payment-service-deployment.yaml
+                    $KUBECTL apply -f k8s/payment-service-deployment.yaml
                     
                     echo "🔌 Desplegando shipping-service..."
-                    kubectl apply -f k8s/shipping-service-deployment.yaml
+                    $KUBECTL apply -f k8s/shipping-service-deployment.yaml
                     
                     echo ""
                     echo "✅ Deployments aplicados"
@@ -362,27 +316,30 @@ EOF
             steps {
                 echo '⏰ Esperando que los pods estén listos...'
                 sh '''
+                    # Usar minikube kubectl directamente
+                    KUBECTL="minikube kubectl --"
+                    
                     echo "Esperando user-service..."
-                    kubectl wait --for=condition=available --timeout=120s deployment/user-service -n ecommerce || true
+                    $KUBECTL wait --for=condition=available --timeout=120s deployment/user-service -n ecommerce || true
                     
                     echo "Esperando product-service..."
-                    kubectl wait --for=condition=available --timeout=120s deployment/product-service -n ecommerce || true
+                    $KUBECTL wait --for=condition=available --timeout=120s deployment/product-service -n ecommerce || true
                     
                     echo "Esperando favourite-service..."
-                    kubectl wait --for=condition=available --timeout=120s deployment/favourite-service -n ecommerce || true
+                    $KUBECTL wait --for=condition=available --timeout=120s deployment/favourite-service -n ecommerce || true
                     
                     echo "Esperando order-service..."
-                    kubectl wait --for=condition=available --timeout=120s deployment/order-service -n ecommerce || true
+                    $KUBECTL wait --for=condition=available --timeout=120s deployment/order-service -n ecommerce || true
                     
                     echo "Esperando payment-service..."
-                    kubectl wait --for=condition=available --timeout=120s deployment/payment-service -n ecommerce || true
+                    $KUBECTL wait --for=condition=available --timeout=120s deployment/payment-service -n ecommerce || true
                     
                     echo "Esperando shipping-service..."
-                    kubectl wait --for=condition=available --timeout=120s deployment/shipping-service -n ecommerce || true
+                    $KUBECTL wait --for=condition=available --timeout=120s deployment/shipping-service -n ecommerce || true
                     
                     echo ""
                     echo "Estado de los pods:"
-                    kubectl get pods -n ecommerce
+                    $KUBECTL get pods -n ecommerce
                 '''
             }
         }
@@ -528,21 +485,24 @@ EOF
             steps {
                 echo '📋 Generando reporte del deployment...'
                 sh '''
+                    # Usar minikube kubectl directamente
+                    KUBECTL="minikube kubectl --"
+                    
                     echo "========================================="
                     echo "    REPORTE DE DEPLOYMENT - STAGE"
                     echo "========================================="
                     echo ""
                     
                     echo "📦 Deployments:"
-                    kubectl get deployments -n ecommerce
+                    $KUBECTL get deployments -n ecommerce
                     echo ""
                     
                     echo "🎯 Services:"
-                    kubectl get services -n ecommerce
+                    $KUBECTL get services -n ecommerce
                     echo ""
                     
                     echo "🐳 Pods:"
-                    kubectl get pods -n ecommerce
+                    $KUBECTL get pods -n ecommerce
                     echo ""
                     
                     echo "📡 Endpoints de los servicios:"
@@ -574,19 +534,29 @@ EOF
         failure {
             echo '❌ Pipeline falló. Revisando estado...'
             sh '''
+                # Usar minikube kubectl directamente
+                KUBECTL="minikube kubectl --"
+                
                 echo "Estado de pods en ecommerce namespace:"
-                kubectl get pods -n ecommerce || true
+                $KUBECTL get pods -n ecommerce || true
                 
                 echo ""
                 echo "Logs de pods con problemas:"
-                kubectl get pods -n ecommerce -o json | jq -r '.items[] | select(.status.phase != "Running") | .metadata.name' | while read pod; do
+                $KUBECTL get pods -n ecommerce -o json | jq -r '.items[] | select(.status.phase != "Running") | .metadata.name' | while read pod; do
                     echo "=== Logs de $pod ==="
-                    kubectl logs $pod -n ecommerce --tail=50 || true
+                    $KUBECTL logs $pod -n ecommerce --tail=50 || true
                 done
             '''
         }
         always {
             echo '🏁 Pipeline finalizado'
+            sh '''
+                # Limpiar archivos temporales
+                rm -f /tmp/kubectl-env-${BUILD_NUMBER}
+                rm -f /tmp/kubeconfig-jenkins-${BUILD_NUMBER}
+                rm -f /tmp/kubectl-wrapper-${BUILD_NUMBER}.sh
+                rm -f /tmp/kubectl-${BUILD_NUMBER}
+            '''
             // Archivar resultados de tests
             junit allowEmptyResults: true, testResults: '**/target/surefire-reports/*.xml'
         }
