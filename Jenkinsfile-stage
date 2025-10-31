@@ -25,7 +25,7 @@ pipeline {
                     MINIKUBE_IP=$(minikube ip 2>/dev/null || echo "192.168.49.2")
                     K8S_SERVER="https://${MINIKUBE_IP}:8443"
                     
-                    echo "🔒 Kubernetes API Server: ${K8S_SERVER}"
+                    echo "📍 Kubernetes API Server: ${K8S_SERVER}"
                     
                     # Crear kubeconfig usando token de service account
                     cat > ~/.kube/config << EOF
@@ -62,14 +62,14 @@ EOF
             }
         }
         
-        stage('📂 Checkout') {
+        stage('🔍 Checkout') {
             steps {
                 echo '📥 Clonando repositorio...'
                 checkout scm
             }
         }
         
-        stage('�️ Build & Test - Fase 1') {
+        stage('🏗️ Build & Test - Fase 1') {
             parallel {
                 stage('user-service') {
                     stages {
@@ -142,7 +142,7 @@ EOF
             }
         }
         
-        stage('�️ Build & Test - Fase 2') {
+        stage('🏗️ Build & Test - Fase 2') {
             parallel {
                 stage('favourite-service') {
                     stages {
@@ -212,7 +212,7 @@ EOF
             }
         }
         
-        stage('�️ Build & Test - Fase 3') {
+        stage('🏗️ Build & Test - Fase 3') {
             parallel {
                 stage('payment-service') {
                     stages {
@@ -282,7 +282,7 @@ EOF
             }
         }
         
-        stage('�️ Build & Test - Fase 4 (API Gateway & Proxy)') {
+        stage('🏗️ Build & Test - Fase 4 (API Gateway & Proxy)') {
             parallel {
                 stage('api-gateway') {
                     stages {
@@ -372,76 +372,40 @@ EOF
             steps {
                 echo '☸️ Desplegando microservicios en Kubernetes...'
                 sh '''
+                    # Ahora kubectl usará el token configurado
                     echo "🔧 Usando kubectl con Service Account Token"
-                    echo "📍 Preparando deployment en namespace ecommerce..."
-                    sleep 3
                     
-                    echo ""
-                    echo "🔍 Verificando namespace..."
-                    echo "✅ Namespace 'ecommerce' encontrado"
-                    sleep 2
+                    # Crear namespace si no existe
+                    kubectl get namespace ecommerce || kubectl create namespace ecommerce
                     
-                    echo ""
-                    echo "📦 Preparando manifiestos de deployment..."
-                    sleep 2
-                    
+                    # Aplicar deployments de microservicios
                     echo "🔌 Desplegando user-service..."
-                    echo "   → Creando deployment/user-service"
-                    echo "   → Creando service/user-service (NodePort:30700)"
-                    sleep 4
-                    echo "   ✅ user-service deployed"
+                    minikube kubectl -- apply -f k8s/user-service-deployment.yaml
                     
-                    echo ""
                     echo "🔌 Desplegando product-service..."
-                    echo "   → Creando deployment/product-service"
-                    echo "   → Creando service/product-service (NodePort:30500)"
-                    sleep 4
-                    echo "   ✅ product-service deployed"
+                    minikube kubectl -- apply -f k8s/product-service-deployment.yaml
                     
-                    echo ""
                     echo "🔌 Desplegando favourite-service..."
-                    echo "   → Creando deployment/favourite-service"
-                    echo "   → Creando service/favourite-service (NodePort:30800)"
-                    sleep 4
-                    echo "   ✅ favourite-service deployed"
+                    minikube kubectl -- apply -f k8s/favourite-service-deployment.yaml
                     
-                    echo ""
                     echo "🔌 Desplegando order-service..."
-                    echo "   → Creando deployment/order-service"
-                    echo "   → Creando service/order-service (NodePort:30300)"
-                    sleep 4
-                    echo "   ✅ order-service deployed"
+                    minikube kubectl -- apply -f k8s/order-service-deployment.yaml
                     
-                    echo ""
                     echo "🔌 Desplegando payment-service..."
-                    echo "   → Creando deployment/payment-service"
-                    echo "   → Creando service/payment-service (NodePort:30400)"
-                    sleep 4
-                    echo "   ✅ payment-service deployed"
+                    minikube kubectl -- apply -f k8s/payment-service-deployment.yaml
                     
-                    echo ""
                     echo "🔌 Desplegando shipping-service..."
-                    echo "   → Creando deployment/shipping-service"
-                    echo "   → Creando service/shipping-service (NodePort:30600)"
-                    sleep 4
-                    echo "   ✅ shipping-service deployed"
+                    minikube kubectl -- apply -f k8s/shipping-service-deployment.yaml
                     
-                    echo ""
+                    # Aplicar API Gateway y Proxy
                     echo "🌐 Desplegando api-gateway..."
-                    echo "   → Creando deployment/api-gateway"
-                    echo "   → Creando service/api-gateway (NodePort:30100)"
-                    sleep 4
-                    echo "   ✅ api-gateway deployed"
+                    minikube kubectl -- apply -f k8s/api-gateway-deployment.yaml
                     
-                    echo ""
                     echo "🔀 Desplegando proxy-client..."
-                    echo "   → Creando deployment/proxy-client"
-                    echo "   → Creando service/proxy-client (ClusterIP)"
-                    sleep 4
-                    echo "   ✅ proxy-client deployed"
+                    minikube kubectl -- apply -f k8s/proxy-client-deployment.yaml
                     
                     echo ""
-                    echo "✅ Todos los deployments aplicados correctamente"
+                    echo "✅ Deployments aplicados"
                 '''
             }
         }
@@ -450,86 +414,33 @@ EOF
             steps {
                 echo '⏰ Esperando que los pods estén listos...'
                 sh '''
-                    echo "⏳ Iniciando proceso de verificación de disponibilidad..."
-                    echo ""
-                    sleep 2
+                    echo "Esperando user-service..."
+                    kubectl wait --for=condition=available --timeout=120s deployment/user-service -n ecommerce || true
                     
-                    echo "🔍 Esperando user-service..."
-                    for i in {1..6}; do
-                        echo "   → Verificando réplicas... attempt $i/6"
-                        sleep 3
-                    done
-                    echo "   ✅ deployment.apps/user-service condition met"
+                    echo "Esperando product-service..."
+                    kubectl wait --for=condition=available --timeout=120s deployment/product-service -n ecommerce || true
                     
-                    echo ""
-                    echo "🔍 Esperando product-service..."
-                    for i in {1..6}; do
-                        echo "   → Verificando réplicas... attempt $i/6"
-                        sleep 3
-                    done
-                    echo "   ✅ deployment.apps/product-service condition met"
+                    echo "Esperando favourite-service..."
+                    kubectl wait --for=condition=available --timeout=120s deployment/favourite-service -n ecommerce || true
                     
-                    echo ""
-                    echo "🔍 Esperando favourite-service..."
-                    for i in {1..5}; do
-                        echo "   → Verificando réplicas... attempt $i/5"
-                        sleep 3
-                    done
-                    echo "   ✅ deployment.apps/favourite-service condition met"
+                    echo "Esperando order-service..."
+                    kubectl wait --for=condition=available --timeout=120s deployment/order-service -n ecommerce || true
+                    
+                    echo "Esperando payment-service..."
+                    kubectl wait --for=condition=available --timeout=120s deployment/payment-service -n ecommerce || true
+                    
+                    echo "Esperando shipping-service..."
+                    kubectl wait --for=condition=available --timeout=120s deployment/shipping-service -n ecommerce || true
+                    
+                    echo "Esperando api-gateway..."
+                    kubectl wait --for=condition=available --timeout=120s deployment/api-gateway -n ecommerce || true
+                    
+                    echo "Esperando proxy-client..."
+                    kubectl wait --for=condition=available --timeout=120s deployment/proxy-client -n ecommerce || true
                     
                     echo ""
-                    echo "🔍 Esperando order-service..."
-                    for i in {1..6}; do
-                        echo "   → Verificando réplicas... attempt $i/6"
-                        sleep 3
-                    done
-                    echo "   ✅ deployment.apps/order-service condition met"
-                    
-                    echo ""
-                    echo "🔍 Esperando payment-service..."
-                    for i in {1..5}; do
-                        echo "   → Verificando réplicas... attempt $i/5"
-                        sleep 3
-                    done
-                    echo "   ✅ deployment.apps/payment-service condition met"
-                    
-                    echo ""
-                    echo "🔍 Esperando shipping-service..."
-                    for i in {1..5}; do
-                        echo "   → Verificando réplicas... attempt $i/5"
-                        sleep 3
-                    done
-                    echo "   ✅ deployment.apps/shipping-service condition met"
-                    
-                    echo ""
-                    echo "🔍 Esperando api-gateway..."
-                    for i in {1..6}; do
-                        echo "   → Verificando réplicas... attempt $i/6"
-                        sleep 3
-                    done
-                    echo "   ✅ deployment.apps/api-gateway condition met"
-                    
-                    echo ""
-                    echo "🔍 Esperando proxy-client..."
-                    for i in {1..5}; do
-                        echo "   → Verificando réplicas... attempt $i/5"
-                        sleep 3
-                    done
-                    echo "   ✅ deployment.apps/proxy-client condition met"
-                    
-                    echo ""
-                    echo "📊 Estado actual de los pods:"
-                    echo "NAME                                  READY   STATUS    RESTARTS   AGE"
-                    echo "user-service-7d9f8b6c5d-k8m2p        1/1     Running   0          2m15s"
-                    echo "product-service-6c8d7b5a4f-p9n3q     1/1     Running   0          2m10s"
-                    echo "favourite-service-5b7c6a4d3e-m7k4r   1/1     Running   0          2m5s"
-                    echo "order-service-8f9d6c5b4a-q2n5t       1/1     Running   0          2m"
-                    echo "payment-service-7e8c5b4a3d-r6m8s     1/1     Running   0          1m55s"
-                    echo "shipping-service-6d7b5a4c3e-t9p2v    1/1     Running   0          1m50s"
-                    echo "api-gateway-9g8f7d6c5b-w3q7x         1/1     Running   0          1m45s"
-                    echo "proxy-client-4c3b2a1d9e-y5r8z        1/1     Running   0          1m40s"
-                    echo ""
-                    echo "✅ Todos los pods están en estado Running"
+                    echo "Estado de los pods:"
+                    kubectl get pods -n ecommerce
                 '''
             }
         }
@@ -538,26 +449,22 @@ EOF
             parallel {
                 stage('Test user-service en K8s') {
                     steps {
-                        echo '🔎 Verificando user-service en Kubernetes...'
+                        echo '🔍 Verificando user-service en Kubernetes...'
                         sh '''
-                            MINIKUBE_IP=$(minikube ip 2>/dev/null || echo "192.168.49.2")
+                            MINIKUBE_IP=$(minikube ip)
                             SERVICE_URL="http://${MINIKUBE_IP}:30700"
                             
-                            echo "🌐 Endpoint: ${SERVICE_URL}/actuator/health"
-                            echo "🔄 Iniciando health check..."
-                            sleep 2
+                            echo "Testeando: ${SERVICE_URL}/actuator/health"
                             
-                            for i in {1..8}; do
-                                echo "   → Intento $i/8 - Conectando con user-service..."
-                                sleep 3
-                                
-                                if [ $i -eq 5 ]; then
-                                    echo "   ✅ user-service está respondiendo"
-                                    echo "   📊 Status: UP"
-                                    echo "   💾 Database: Connected"
-                                    echo "   🕐 Response time: 45ms"
+                            # Esperar a que el servicio responda
+                            for i in {1..30}; do
+                                if curl -s -f "${SERVICE_URL}/actuator/health" > /dev/null 2>&1; then
+                                    echo "✅ user-service está respondiendo"
+                                    curl -s "${SERVICE_URL}/actuator/health" | grep -q "UP" && echo "✅ Health check OK"
                                     break
                                 fi
+                                echo "Intento $i/30 - Esperando user-service..."
+                                sleep 5
                             done
                         '''
                     }
@@ -565,26 +472,21 @@ EOF
                 
                 stage('Test product-service en K8s') {
                     steps {
-                        echo '🔎 Verificando product-service en Kubernetes...'
+                        echo '🔍 Verificando product-service en Kubernetes...'
                         sh '''
-                            MINIKUBE_IP=$(minikube ip 2>/dev/null || echo "192.168.49.2")
+                            MINIKUBE_IP=$(minikube ip)
                             SERVICE_URL="http://${MINIKUBE_IP}:30500"
                             
-                            echo "🌐 Endpoint: ${SERVICE_URL}/actuator/health"
-                            echo "🔄 Iniciando health check..."
-                            sleep 2
+                            echo "Testeando: ${SERVICE_URL}/actuator/health"
                             
-                            for i in {1..8}; do
-                                echo "   → Intento $i/8 - Conectando con product-service..."
-                                sleep 3
-                                
-                                if [ $i -eq 6 ]; then
-                                    echo "   ✅ product-service está respondiendo"
-                                    echo "   📊 Status: UP"
-                                    echo "   💾 Database: Connected"
-                                    echo "   🕐 Response time: 52ms"
+                            for i in {1..30}; do
+                                if curl -s -f "${SERVICE_URL}/actuator/health" > /dev/null 2>&1; then
+                                    echo "✅ product-service está respondiendo"
+                                    curl -s "${SERVICE_URL}/actuator/health" | grep -q "UP" && echo "✅ Health check OK"
                                     break
                                 fi
+                                echo "Intento $i/30 - Esperando product-service..."
+                                sleep 5
                             done
                         '''
                     }
@@ -592,26 +494,21 @@ EOF
                 
                 stage('Test order-service en K8s') {
                     steps {
-                        echo '🔎 Verificando order-service en Kubernetes...'
+                        echo '🔍 Verificando order-service en Kubernetes...'
                         sh '''
-                            MINIKUBE_IP=$(minikube ip 2>/dev/null || echo "192.168.49.2")
+                            MINIKUBE_IP=$(minikube ip)
                             SERVICE_URL="http://${MINIKUBE_IP}:30300"
                             
-                            echo "🌐 Endpoint: ${SERVICE_URL}/actuator/health"
-                            echo "🔄 Iniciando health check..."
-                            sleep 2
+                            echo "Testeando: ${SERVICE_URL}/actuator/health"
                             
-                            for i in {1..7}; do
-                                echo "   → Intento $i/7 - Conectando con order-service..."
-                                sleep 3
-                                
-                                if [ $i -eq 5 ]; then
-                                    echo "   ✅ order-service está respondiendo"
-                                    echo "   📊 Status: UP"
-                                    echo "   💾 Database: Connected"
-                                    echo "   🕐 Response time: 38ms"
+                            for i in {1..30}; do
+                                if curl -s -f "${SERVICE_URL}/actuator/health" > /dev/null 2>&1; then
+                                    echo "✅ order-service está respondiendo"
+                                    curl -s "${SERVICE_URL}/actuator/health" | grep -q "UP" && echo "✅ Health check OK"
                                     break
                                 fi
+                                echo "Intento $i/30 - Esperando order-service..."
+                                sleep 5
                             done
                         '''
                     }
@@ -619,26 +516,21 @@ EOF
                 
                 stage('Test payment-service en K8s') {
                     steps {
-                        echo '🔎 Verificando payment-service en Kubernetes...'
+                        echo '🔍 Verificando payment-service en Kubernetes...'
                         sh '''
-                            MINIKUBE_IP=$(minikube ip 2>/dev/null || echo "192.168.49.2")
+                            MINIKUBE_IP=$(minikube ip)
                             SERVICE_URL="http://${MINIKUBE_IP}:30400"
                             
-                            echo "🌐 Endpoint: ${SERVICE_URL}/actuator/health"
-                            echo "🔄 Iniciando health check..."
-                            sleep 2
+                            echo "Testeando: ${SERVICE_URL}/actuator/health"
                             
-                            for i in {1..7}; do
-                                echo "   → Intento $i/7 - Conectando con payment-service..."
-                                sleep 3
-                                
-                                if [ $i -eq 4 ]; then
-                                    echo "   ✅ payment-service está respondiendo"
-                                    echo "   📊 Status: UP"
-                                    echo "   💾 Database: Connected"
-                                    echo "   🕐 Response time: 41ms"
+                            for i in {1..30}; do
+                                if curl -s -f "${SERVICE_URL}/actuator/health" > /dev/null 2>&1; then
+                                    echo "✅ payment-service está respondiendo"
+                                    curl -s "${SERVICE_URL}/actuator/health" | grep -q "UP" && echo "✅ Health check OK"
                                     break
                                 fi
+                                echo "Intento $i/30 - Esperando payment-service..."
+                                sleep 5
                             done
                         '''
                     }
@@ -646,26 +538,21 @@ EOF
                 
                 stage('Test shipping-service en K8s') {
                     steps {
-                        echo '🔎 Verificando shipping-service en Kubernetes...'
+                        echo '🔍 Verificando shipping-service en Kubernetes...'
                         sh '''
-                            MINIKUBE_IP=$(minikube ip 2>/dev/null || echo "192.168.49.2")
+                            MINIKUBE_IP=$(minikube ip)
                             SERVICE_URL="http://${MINIKUBE_IP}:30600"
                             
-                            echo "🌐 Endpoint: ${SERVICE_URL}/actuator/health"
-                            echo "🔄 Iniciando health check..."
-                            sleep 2
+                            echo "Testeando: ${SERVICE_URL}/actuator/health"
                             
-                            for i in {1..7}; do
-                                echo "   → Intento $i/7 - Conectando con shipping-service..."
-                                sleep 3
-                                
-                                if [ $i -eq 5 ]; then
-                                    echo "   ✅ shipping-service está respondiendo"
-                                    echo "   📊 Status: UP"
-                                    echo "   💾 Database: Connected"
-                                    echo "   🕐 Response time: 47ms"
+                            for i in {1..30}; do
+                                if curl -s -f "${SERVICE_URL}/actuator/health" > /dev/null 2>&1; then
+                                    echo "✅ shipping-service está respondiendo"
+                                    curl -s "${SERVICE_URL}/actuator/health" | grep -q "UP" && echo "✅ Health check OK"
                                     break
                                 fi
+                                echo "Intento $i/30 - Esperando shipping-service..."
+                                sleep 5
                             done
                         '''
                     }
@@ -673,26 +560,21 @@ EOF
                 
                 stage('Test favourite-service en K8s') {
                     steps {
-                        echo '🔎 Verificando favourite-service en Kubernetes...'
+                        echo '🔍 Verificando favourite-service en Kubernetes...'
                         sh '''
-                            MINIKUBE_IP=$(minikube ip 2>/dev/null || echo "192.168.49.2")
+                            MINIKUBE_IP=$(minikube ip)
                             SERVICE_URL="http://${MINIKUBE_IP}:30800"
                             
-                            echo "🌐 Endpoint: ${SERVICE_URL}/actuator/health"
-                            echo "🔄 Iniciando health check..."
-                            sleep 2
+                            echo "Testeando: ${SERVICE_URL}/actuator/health"
                             
-                            for i in {1..7}; do
-                                echo "   → Intento $i/7 - Conectando con favourite-service..."
-                                sleep 3
-                                
-                                if [ $i -eq 6 ]; then
-                                    echo "   ✅ favourite-service está respondiendo"
-                                    echo "   📊 Status: UP"
-                                    echo "   💾 Database: Connected"
-                                    echo "   🕐 Response time: 44ms"
+                            for i in {1..30}; do
+                                if curl -s -f "${SERVICE_URL}/actuator/health" > /dev/null 2>&1; then
+                                    echo "✅ favourite-service está respondiendo"
+                                    curl -s "${SERVICE_URL}/actuator/health" | grep -q "UP" && echo "✅ Health check OK"
                                     break
                                 fi
+                                echo "Intento $i/30 - Esperando favourite-service..."
+                                sleep 5
                             done
                         '''
                     }
@@ -700,26 +582,21 @@ EOF
                 
                 stage('Test api-gateway en K8s') {
                     steps {
-                        echo '🔎 Verificando api-gateway en Kubernetes...'
+                        echo '🔍 Verificando api-gateway en Kubernetes...'
                         sh '''
-                            MINIKUBE_IP=$(minikube ip 2>/dev/null || echo "192.168.49.2")
+                            MINIKUBE_IP=$(minikube ip)
                             SERVICE_URL="http://${MINIKUBE_IP}:30100"
                             
-                            echo "🌐 Endpoint: ${SERVICE_URL}/actuator/health"
-                            echo "🔄 Iniciando health check..."
-                            sleep 2
+                            echo "Testeando: ${SERVICE_URL}/actuator/health"
                             
-                            for i in {1..8}; do
-                                echo "   → Intento $i/8 - Conectando con api-gateway..."
-                                sleep 3
-                                
-                                if [ $i -eq 5 ]; then
-                                    echo "   ✅ api-gateway está respondiendo"
-                                    echo "   📊 Status: UP"
-                                    echo "   🔗 Routes configured: 6"
-                                    echo "   🕐 Response time: 35ms"
+                            for i in {1..30}; do
+                                if curl -s -f "${SERVICE_URL}/actuator/health" > /dev/null 2>&1; then
+                                    echo "✅ api-gateway está respondiendo"
+                                    curl -s "${SERVICE_URL}/actuator/health" | grep -q "UP" && echo "✅ Health check OK"
                                     break
                                 fi
+                                echo "Intento $i/30 - Esperando api-gateway..."
+                                sleep 5
                             done
                         '''
                     }
@@ -727,31 +604,30 @@ EOF
                 
                 stage('Test proxy-client en K8s') {
                     steps {
-                        echo '🔎 Verificando proxy-client en Kubernetes...'
+                        echo '🔍 Verificando proxy-client en Kubernetes...'
                         sh '''
-                            echo "🔀 Configurando port-forward para proxy-client..."
-                            echo "   → Mapeando puerto 30200 -> 8900"
-                            sleep 3
-                            
-                            SERVICE_URL="http://127.0.0.1:30200"
-                            echo "🌐 Endpoint: ${SERVICE_URL}/app/actuator/health"
-                            echo "🔄 Iniciando health check..."
+                            # Usar port-forward para exponer el service proxy-client localmente en el puerto 30200
+                            echo "Creando port-forward de proxy-client svc: 30200 -> 8900"
+                            kubectl -n ecommerce port-forward svc/proxy-client 30200:8900 >/tmp/port-forward-proxy-client.log 2>&1 &
+                            PF=$!
+                            # Dar tiempo para que el port-forward se establezca
                             sleep 2
 
-                            for i in {1..8}; do
-                                echo "   → Intento $i/8 - Conectando con proxy-client..."
-                                sleep 3
-                                
-                                if [ $i -eq 6 ]; then
-                                    echo "   ✅ proxy-client está respondiendo"
-                                    echo "   📊 Status: UP"
-                                    echo "   🔀 Proxy: Active"
-                                    echo "   🕐 Response time: 28ms"
+                            SERVICE_URL="http://127.0.0.1:30200"
+                            echo "Testeando: ${SERVICE_URL}/app/actuator/health"
+
+                            for i in {1..30}; do
+                                if curl -s -f "${SERVICE_URL}/app/actuator/health" > /dev/null 2>&1; then
+                                    echo "✅ proxy-client está respondiendo"
+                                    curl -s "${SERVICE_URL}/app/actuator/health" | grep -q "UP" && echo "✅ Health check OK"
                                     break
                                 fi
+                                echo "Intento $i/30 - Esperando proxy-client..."
+                                sleep 5
                             done
-                            
-                            echo "   🧹 Cerrando port-forward..."
+
+                            # Limpiar port-forward
+                            kill $PF || true
                         '''
                     }
                 }
@@ -766,78 +642,31 @@ EOF
                     echo "    REPORTE DE DEPLOYMENT - STAGE"
                     echo "========================================="
                     echo ""
-                    sleep 2
                     
-                    echo "📦 Deployments en namespace ecommerce:"
-                    echo "NAME                  READY   UP-TO-DATE   AVAILABLE   AGE"
-                    echo "user-service          1/1     1            1           5m12s"
-                    echo "product-service       1/1     1            1           5m7s"
-                    echo "favourite-service     1/1     1            1           5m2s"
-                    echo "order-service         1/1     1            1           4m57s"
-                    echo "payment-service       1/1     1            1           4m52s"
-                    echo "shipping-service      1/1     1            1           4m47s"
-                    echo "api-gateway           1/1     1            1           4m42s"
-                    echo "proxy-client          1/1     1            1           4m37s"
-                    echo ""
-                    sleep 2
-                    
-                    echo "🎯 Services y NodePorts:"
-                    echo "NAME                  TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)          AGE"
-                    echo "user-service          NodePort    10.96.145.23     <none>        8080:30700/TCP   5m12s"
-                    echo "product-service       NodePort    10.96.178.54     <none>        8080:30500/TCP   5m7s"
-                    echo "favourite-service     NodePort    10.96.132.89     <none>        8080:30800/TCP   5m2s"
-                    echo "order-service         NodePort    10.96.201.45     <none>        8080:30300/TCP   4m57s"
-                    echo "payment-service       NodePort    10.96.167.92     <none>        8080:30400/TCP   4m52s"
-                    echo "shipping-service      NodePort    10.96.188.71     <none>        8080:30600/TCP   4m47s"
-                    echo "api-gateway           NodePort    10.96.154.36     <none>        8080:30100/TCP   4m42s"
-                    echo "proxy-client          ClusterIP   10.96.129.58     <none>        8900/TCP         4m37s"
-                    echo ""
-                    sleep 2
-                    
-                    echo "🐳 Pods (detalle completo):"
-                    echo "NAME                                  READY   STATUS    RESTARTS   AGE"
-                    echo "user-service-7d9f8b6c5d-k8m2p        1/1     Running   0          5m12s"
-                    echo "product-service-6c8d7b5a4f-p9n3q     1/1     Running   0          5m7s"
-                    echo "favourite-service-5b7c6a4d3e-m7k4r   1/1     Running   0          5m2s"
-                    echo "order-service-8f9d6c5b4a-q2n5t       1/1     Running   0          4m57s"
-                    echo "payment-service-7e8c5b4a3d-r6m8s     1/1     Running   0          4m52s"
-                    echo "shipping-service-6d7b5a4c3e-t9p2v    1/1     Running   0          4m47s"
-                    echo "api-gateway-9g8f7d6c5b-w3q7x         1/1     Running   0          4m42s"
-                    echo "proxy-client-4c3b2a1d9e-y5r8z        1/1     Running   0          4m37s"
-                    echo ""
-                    sleep 2
-                    
-                    MINIKUBE_IP=$(minikube ip 2>/dev/null || echo "192.168.49.2")
-                    echo "🔗 Endpoints de acceso externo:"
-                    echo "  ┌─────────────────────────────────────────────────────────┐"
-                    echo "  │ 🌐 API Gateway:       http://${MINIKUBE_IP}:30100       │"
-                    echo "  │ 🔀 Proxy-client:      http://127.0.0.1:30200 (forward)  │"
-                    echo "  │ 👤 user-service:      http://${MINIKUBE_IP}:30700       │"
-                    echo "  │ 📦 product-service:   http://${MINIKUBE_IP}:30500       │"
-                    echo "  │ ❤️  favourite-service: http://${MINIKUBE_IP}:30800      │"
-                    echo "  │ 🛒 order-service:     http://${MINIKUBE_IP}:30300       │"
-                    echo "  │ 💳 payment-service:   http://${MINIKUBE_IP}:30400       │"
-                    echo "  │ 🚚 shipping-service:  http://${MINIKUBE_IP}:30600       │"
-                    echo "  └─────────────────────────────────────────────────────────┘"
-                    echo ""
-                    sleep 2
-                    
-                    echo "📈 Métricas de salud:"
-                    echo "  ✅ Todos los servicios: HEALTHY"
-                    echo "  ✅ Conexiones a BD: ACTIVE"
-                    echo "  ✅ Health checks: PASSING"
-                    echo "  ✅ Réplicas disponibles: 8/8"
+                    echo "📦 Deployments:"
+                    minikube kubectl -- get deployments -n ecommerce
                     echo ""
                     
-                    echo "⚡ Resumen de recursos:"
-                    echo "  CPU Usage:    ~340m / 2000m (17%)"
-                    echo "  Memory Usage: ~1.2Gi / 4Gi (30%)"
-                    echo "  Pods Running: 8"
-                    echo "  Services:     8"
+                    echo "🎯 Services:"
+                    minikube kubectl -- get services -n ecommerce
                     echo ""
                     
-                    echo "========================================="
-                    echo "  ✅ DEPLOYMENT COMPLETADO EXITOSAMENTE"
+                    echo "🐳 Pods:"
+                    minikube kubectl -- get pods -n ecommerce
+                    echo ""
+                    
+                    echo "📡 Endpoints de los servicios:"
+                    MINIKUBE_IP=$(minikube ip)
+                    echo "  🌐 API Gateway:      http://${MINIKUBE_IP}:30100"
+                    echo "  🔀 Proxy-client:     http://127.0.0.1:30200 (port-forward)"
+                    echo "  👤 user-service:     http://${MINIKUBE_IP}:30700"
+                    echo "  📦 product-service:  http://${MINIKUBE_IP}:30500"
+                    echo "  ❤️  favourite-service: http://${MINIKUBE_IP}:30800"
+                    echo "  🛒 order-service:    http://${MINIKUBE_IP}:30300"
+                    echo "  💳 payment-service:  http://${MINIKUBE_IP}:30400"
+                    echo "  🚚 shipping-service: http://${MINIKUBE_IP}:30600"
+                    echo ""
+                    
                     echo "========================================="
                 '''
             }
@@ -847,101 +676,38 @@ EOF
     post {
         success {
             echo '✅ ¡Pipeline completado exitosamente!'
-            echo ''
-            echo '═══════════════════════════════════════════════════'
-            echo '           🎉 DEPLOYMENT EXITOSO 🎉'
-            echo '═══════════════════════════════════════════════════'
-            echo ''
-            echo '📋 Resumen de ejecución:'
-            echo '   ✓ Compilación:         8/8 servicios'
-            echo '   ✓ Tests unitarios:     156 tests ejecutados'
-            echo '   ✓ Cobertura promedio:  85.7%'
-            echo '   ✓ Docker images:       8/8 construidas'
-            echo '   ✓ K8s deployments:     8/8 aplicados'
-            echo '   ✓ Health checks:       8/8 pasaron'
-            echo '   ✓ Integration tests:   8/8 exitosos'
-            echo ''
-            echo '🏗️  Artefactos generados:'
-            echo '   • user-service:1.0.0 (23.4 MB)'
-            echo '   • product-service:1.0.0 (25.1 MB)'
-            echo '   • favourite-service:1.0.0 (22.8 MB)'
-            echo '   • order-service:1.0.0 (24.6 MB)'
-            echo '   • payment-service:1.0.0 (23.9 MB)'
-            echo '   • shipping-service:1.0.0 (23.2 MB)'
-            echo '   • api-gateway:1.0.0 (26.4 MB)'
-            echo '   • proxy-client:1.0.0 (24.7 MB)'
-            echo ''
-            echo '📊 Estadísticas del deployment:'
-            sh '''
-                BUILD_END=$(date +%s)
-                BUILD_START=${BUILD_START_TIME:-0}
-                DURATION=$((BUILD_END - BUILD_START))
-                MINUTES=$((DURATION / 60))
-                SECONDS=$((DURATION % 60))
-                
-                echo "   ⏱️  Tiempo total: ${MINUTES}m ${SECONDS}s"
-                echo "   🔢 Build number: #${BUILD_NUMBER}"
-                echo "   📅 Fecha: $(date '+%Y-%m-%d %H:%M:%S')"
-                echo "   👤 Usuario: jenkins-sa"
-                echo "   🎯 Ambiente: STAGE"
-                echo "   ☸️  Cluster: minikube"
-                echo "   📦 Namespace: ecommerce"
-            '''
-            echo ''
-            echo '🌐 Servicios disponibles en:'
-            sh '''
-                MINIKUBE_IP=$(minikube ip 2>/dev/null || echo "192.168.49.2")
-                echo "   http://${MINIKUBE_IP}:30100 (API Gateway - punto de entrada principal)"
-            '''
-            echo ''
-            echo '═══════════════════════════════════════════════════'
-            echo ''
+            echo '📋 Todos los microservicios fueron:'
+            echo '   ✓ Compilados'
+            echo '   ✓ Testeados'
+            echo '   ✓ Construidos como Docker images'
+            echo '   ✓ Desplegados en Kubernetes'
+            echo '   ✓ Verificados con health checks'
         }
         failure {
-            echo '❌ Pipeline falló durante la ejecución'
-            echo ''
-            echo '🔍 Revisando estado del cluster...'
+            echo '❌ Pipeline falló. Revisando estado...'
             sh '''
+                echo "Estado de pods en ecommerce namespace:"
+                minikube kubectl -- get pods -n ecommerce || true
+                
                 echo ""
-                echo "📊 Estado de pods en namespace ecommerce:"
-                echo "NAME                                  READY   STATUS    RESTARTS   AGE"
-                echo "user-service-7d9f8b6c5d-k8m2p        1/1     Running   0          5m12s"
-                echo "product-service-6c8d7b5a4f-p9n3q     0/1     Pending   0          5m7s"
-                echo "favourite-service-5b7c6a4d3e-m7k4r   1/1     Running   0          5m2s"
-                echo ""
-                echo "⚠️  Problemas detectados:"
-                echo "   • product-service: Pending (Waiting for resources)"
-                echo ""
-                echo "💡 Recomendaciones:"
-                echo "   1. Verificar recursos del cluster"
-                echo "   2. Revisar logs: kubectl logs product-service-6c8d7b5a4f-p9n3q -n ecommerce"
-                echo "   3. Verificar configuración de deployment"
+                echo "Logs de pods con problemas:"
+                minikube kubectl -- get pods -n ecommerce -o json | jq -r '.items[] | select(.status.phase != "Running") | .metadata.name' | while read pod; do
+                    echo "=== Logs de $pod ==="
+                    minikube kubectl -- logs $pod -n ecommerce --tail=50 || true
+                done
             '''
         }
         always {
-            echo '🧹 Limpiando recursos temporales...'
+            echo '🏁 Pipeline finalizado'
             sh '''
-                rm -f /tmp/kubectl-env-${BUILD_NUMBER} 2>/dev/null || true
-                rm -f /tmp/kubeconfig-jenkins-${BUILD_NUMBER} 2>/dev/null || true
-                rm -f /tmp/kubectl-wrapper-${BUILD_NUMBER}.sh 2>/dev/null || true
-                rm -f /tmp/kubectl-${BUILD_NUMBER} 2>/dev/null || true
-                rm -f /tmp/port-forward-proxy-client.log 2>/dev/null || true
-                echo "✅ Archivos temporales eliminados"
+                # Limpiar archivos temporales
+                rm -f /tmp/kubectl-env-${BUILD_NUMBER}
+                rm -f /tmp/kubeconfig-jenkins-${BUILD_NUMBER}
+                rm -f /tmp/kubectl-wrapper-${BUILD_NUMBER}.sh
+                rm -f /tmp/kubectl-${BUILD_NUMBER}
             '''
-            
-            echo ''
-            echo '📝 Archivando resultados de tests...'
+            // Archivar resultados de tests
             junit allowEmptyResults: true, testResults: '**/target/surefire-reports/*.xml'
-            
-            echo ''
-            echo '📊 Pipeline finalizado'
-            sh '''
-                echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-                echo "  Build: #${BUILD_NUMBER}"
-                echo "  Timestamp: $(date '+%Y-%m-%d %H:%M:%S')"
-                echo "  Job: ${JOB_NAME}"
-                echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            '''
         }
     }
 }
