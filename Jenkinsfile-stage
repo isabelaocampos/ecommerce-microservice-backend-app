@@ -27,26 +27,32 @@ pipeline {
                     
                     echo "📍 Kubernetes API Server: ${K8S_SERVER}"
                     
-                    # Crear kubeconfig usando token de service account
-                    cat > ~/.kube/config << EOF
+                                        # Verificar que K8S_TOKEN esté definido para no generar un kubeconfig inválido
+                                        if [ -z "${K8S_TOKEN}" ]; then
+                                                echo "❌ K8S_TOKEN no está definido en el entorno. Configuración de Kubernetes abortada."
+                                                exit 1
+                                        fi
+
+                                        # Crear kubeconfig usando token de service account (token entre comillas para evitar errores YAML)
+                                        cat > ~/.kube/config << EOF
 apiVersion: v1
 kind: Config
 clusters:
 - cluster:
-    insecure-skip-tls-verify: true
-    server: ${K8S_SERVER}
-  name: minikube
+        insecure-skip-tls-verify: true
+        server: ${K8S_SERVER}
+    name: minikube
 contexts:
 - context:
-    cluster: minikube
-    user: jenkins-sa
-    namespace: ecommerce
-  name: minikube
+        cluster: minikube
+        user: jenkins-sa
+        namespace: ecommerce
+    name: minikube
 current-context: minikube
 users:
 - name: jenkins-sa
-  user:
-    token: ${K8S_TOKEN}
+    user:
+        token: "${K8S_TOKEN}"
 EOF
                     
                     chmod 600 ~/.kube/config
