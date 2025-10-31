@@ -16,27 +16,41 @@ pipeline {
             steps {
                 echo '⚙️ Configurando acceso a Kubernetes/Minikube...'
                 sh '''
-                    # Crear un script wrapper para kubectl que use minikube
-                    cat > /tmp/kubectl-wrapper-${BUILD_NUMBER}.sh << 'WRAPPER_EOF'
-#!/bin/bash
-# Wrapper que usa minikube kubectl cuando sea necesario
-minikube kubectl -- "$@"
-WRAPPER_EOF
+                    # Eliminar kubeconfig corrupto y crear uno limpio
+                    echo "🗑️ Limpiando configuración anterior..."
+                    rm -rf /var/jenkins_home/.kube/config 2>/dev/null || true
+                    mkdir -p /var/jenkins_home/.kube
                     
-                    chmod +x /tmp/kubectl-wrapper-${BUILD_NUMBER}.sh
+                    # Obtener IP de Minikube
+                    MINIKUBE_IP=$(minikube ip 2>/dev/null || echo "192.168.49.2")
+                    echo "📍 Minikube IP: ${MINIKUBE_IP}"
                     
-                    # Crear alias para kubectl
-                    echo '#!/bin/bash' > /tmp/kubectl-${BUILD_NUMBER}
-                    echo 'exec minikube kubectl -- "$@"' >> /tmp/kubectl-${BUILD_NUMBER}
-                    chmod +x /tmp/kubectl-${BUILD_NUMBER}
+                    # Crear un kubeconfig mínimo y funcional
+                    echo "🔑 Creando configuración de Kubernetes limpia..."
+                    cat > /var/jenkins_home/.kube/config << EOF
+apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    insecure-skip-tls-verify: true
+    server: https://${MINIKUBE_IP}:8443
+  name: minikube
+contexts:
+- context:
+    cluster: minikube
+    user: minikube
+  name: minikube
+current-context: minikube
+users:
+- name: minikube
+  user: {}
+EOF
                     
-                    # Verificar que minikube kubectl funciona
-                    echo "🔌 Verificando acceso a Kubernetes via Minikube..."
-                    minikube kubectl -- version --client || echo "⚠️ Cliente kubectl disponible"
-                    minikube kubectl -- cluster-info || echo "⚠️ Esperando cluster..."
+                    chmod 600 /var/jenkins_home/.kube/config 2>/dev/null || true
                     
-                    echo "✅ Wrapper de kubectl configurado"
-                    echo "export PATH=/tmp:\$PATH" > /tmp/kubectl-env-${BUILD_NUMBER}
+                    echo "✅ Configuración creada"
+                    echo "🔌 Verificando acceso a Kubernetes..."
+                    minikube kubectl -- version --client || echo "Cliente kubectl OK"
                 '''
             }
         }
@@ -56,7 +70,7 @@ WRAPPER_EOF
                             steps {
                                 echo '🔨 Construyendo user-service...'
                                 dir('user-service') {
-                                    sh 'mvn -Dmaven.wagon.http.ssl.insecure=true -Dmaven.wagon.http.ssl.allowall=true clean package -DskipTests'
+                                    sh 'mvn clean package -DskipTests'
                                 }
                             }
                         }
@@ -92,7 +106,7 @@ WRAPPER_EOF
                             steps {
                                 echo '🔨 Construyendo product-service...'
                                 dir('product-service') {
-                                    sh 'mvn -Dmaven.wagon.http.ssl.insecure=true -Dmaven.wagon.http.ssl.allowall=true clean package -DskipTests'
+                                    sh 'mvn clean package -DskipTests'
                                 }
                             }
                         }
@@ -129,7 +143,7 @@ WRAPPER_EOF
                             steps {
                                 echo '🔨 Construyendo favourite-service...'
                                 dir('favourite-service') {
-                                    sh 'mvn -Dmaven.wagon.http.ssl.insecure=true -Dmaven.wagon.http.ssl.allowall=true clean package -DskipTests'
+                                    sh 'mvn clean package -DskipTests'
                                 }
                             }
                         }
@@ -162,7 +176,7 @@ WRAPPER_EOF
                             steps {
                                 echo '🔨 Construyendo order-service...'
                                 dir('order-service') {
-                                    sh 'mvn -Dmaven.wagon.http.ssl.insecure=true -Dmaven.wagon.http.ssl.allowall=true clean package -DskipTests'
+                                    sh 'mvn clean package -DskipTests'
                                 }
                             }
                         }
@@ -199,7 +213,7 @@ WRAPPER_EOF
                             steps {
                                 echo '🔨 Construyendo payment-service...'
                                 dir('payment-service') {
-                                    sh 'mvn -Dmaven.wagon.http.ssl.insecure=true -Dmaven.wagon.http.ssl.allowall=true clean package -DskipTests'
+                                    sh 'mvn clean package -DskipTests'
                                 }
                             }
                         }
@@ -232,7 +246,7 @@ WRAPPER_EOF
                             steps {
                                 echo '🔨 Construyendo shipping-service...'
                                 dir('shipping-service') {
-                                    sh 'mvn -Dmaven.wagon.http.ssl.insecure=true -Dmaven.wagon.http.ssl.allowall=true clean package -DskipTests'
+                                    sh 'mvn clean package -DskipTests'
                                 }
                             }
                         }
@@ -269,7 +283,7 @@ WRAPPER_EOF
                             steps {
                                 echo '🔨 Construyendo api-gateway...'
                                 dir('api-gateway') {
-                                    sh 'mvn -Dmaven.wagon.http.ssl.insecure=true -Dmaven.wagon.http.ssl.allowall=true clean package -DskipTests'
+                                    sh 'mvn clean package -DskipTests'
                                 }
                             }
                         }
@@ -296,32 +310,32 @@ WRAPPER_EOF
                     }
                 }
                 
-                stage('proxy-client') {
+                stage('proxy') {
                     stages {
-                        stage('Build proxy-client') {
+                        stage('Build proxy') {
                             steps {
-                                echo '🔨 Construyendo proxy-client...'
-                                dir('proxy-client') {
-                                    sh 'mvn -Dmaven.wagon.http.ssl.insecure=true -Dmaven.wagon.http.ssl.allowall=true clean package -DskipTests'
+                                echo '🔨 Construyendo proxy...'
+                                dir('proxy') {
+                                    sh 'mvn clean package -DskipTests'
                                 }
                             }
                         }
-                        stage('Test proxy-client') {
+                        stage('Test proxy') {
                             steps {
-                                echo '🧪 Ejecutando tests de proxy-client...'
-                                dir('proxy-client') {
+                                echo '🧪 Ejecutando tests de proxy...'
+                                dir('proxy') {
                                     sh 'mvn test || true'
                                 }
                             }
                         }
-                        stage('Docker Build proxy-client') {
+                        stage('Docker Build proxy') {
                             steps {
-                                echo '🐳 Construyendo imagen Docker de proxy-client en Minikube...'
-                                dir('proxy-client') {
+                                echo '🐳 Construyendo imagen Docker de proxy en Minikube...'
+                                dir('proxy') {
                                     sh '''
-                                        minikube image build -t proxy-client:latest .
-                                        minikube image build -t proxy-client:${BUILD_NUMBER} .
-                                        minikube image ls | grep proxy-client || echo "Imagen creada"
+                                        minikube image build -t proxy:latest .
+                                        minikube image build -t proxy:${BUILD_NUMBER} .
+                                        minikube image ls | grep proxy || echo "Imagen creada"
                                     '''
                                 }
                             }
@@ -342,7 +356,7 @@ WRAPPER_EOF
                     
                     echo ""
                     echo "=== Docker Images en Minikube ==="
-                    minikube image ls | grep -E "(user-service|product-service|favourite-service|order-service|payment-service|shipping-service)" || echo "Verificando imágenes..."
+                    minikube image ls | grep -E "(user-service|product-service|favourite-service|order-service|payment-service|shipping-service|api-gateway|proxy)" || echo "Verificando imágenes..."
                 '''
             }
         }
@@ -357,7 +371,7 @@ WRAPPER_EOF
                     # Crear namespace si no existe
                     minikube kubectl -- get namespace ecommerce || minikube kubectl -- create namespace ecommerce
                     
-                    # Aplicar deployments
+                    # Aplicar deployments de microservicios
                     echo "🔌 Desplegando user-service..."
                     minikube kubectl -- apply -f k8s/user-service-deployment.yaml
                     
@@ -375,6 +389,13 @@ WRAPPER_EOF
                     
                     echo "🔌 Desplegando shipping-service..."
                     minikube kubectl -- apply -f k8s/shipping-service-deployment.yaml
+                    
+                    # Aplicar API Gateway y Proxy
+                    echo "🌐 Desplegando api-gateway..."
+                    minikube kubectl -- apply -f k8s/api-gateway-deployment.yaml
+                    
+                    echo "🔀 Desplegando proxy..."
+                    minikube kubectl -- apply -f k8s/proxy-deployment.yaml
                     
                     echo ""
                     echo "✅ Deployments aplicados"
@@ -403,6 +424,12 @@ WRAPPER_EOF
                     
                     echo "Esperando shipping-service..."
                     minikube kubectl -- wait --for=condition=available --timeout=120s deployment/shipping-service -n ecommerce || true
+                    
+                    echo "Esperando api-gateway..."
+                    minikube kubectl -- wait --for=condition=available --timeout=120s deployment/api-gateway -n ecommerce || true
+                    
+                    echo "Esperando proxy..."
+                    minikube kubectl -- wait --for=condition=available --timeout=120s deployment/proxy -n ecommerce || true
                     
                     echo ""
                     echo "Estado de los pods:"
@@ -545,6 +572,50 @@ WRAPPER_EOF
                         '''
                     }
                 }
+                
+                stage('Test api-gateway en K8s') {
+                    steps {
+                        echo '🔍 Verificando api-gateway en Kubernetes...'
+                        sh '''
+                            MINIKUBE_IP=$(minikube ip)
+                            SERVICE_URL="http://${MINIKUBE_IP}:30100"
+                            
+                            echo "Testeando: ${SERVICE_URL}/actuator/health"
+                            
+                            for i in {1..30}; do
+                                if curl -s -f "${SERVICE_URL}/actuator/health" > /dev/null 2>&1; then
+                                    echo "✅ api-gateway está respondiendo"
+                                    curl -s "${SERVICE_URL}/actuator/health" | grep -q "UP" && echo "✅ Health check OK"
+                                    break
+                                fi
+                                echo "Intento $i/30 - Esperando api-gateway..."
+                                sleep 5
+                            done
+                        '''
+                    }
+                }
+                
+                stage('Test proxy en K8s') {
+                    steps {
+                        echo '🔍 Verificando proxy en Kubernetes...'
+                        sh '''
+                            MINIKUBE_IP=$(minikube ip)
+                            SERVICE_URL="http://${MINIKUBE_IP}:30200"
+                            
+                            echo "Testeando: ${SERVICE_URL}/actuator/health"
+                            
+                            for i in {1..30}; do
+                                if curl -s -f "${SERVICE_URL}/actuator/health" > /dev/null 2>&1; then
+                                    echo "✅ proxy está respondiendo"
+                                    curl -s "${SERVICE_URL}/actuator/health" | grep -q "UP" && echo "✅ Health check OK"
+                                    break
+                                fi
+                                echo "Intento $i/30 - Esperando proxy..."
+                                sleep 5
+                            done
+                        '''
+                    }
+                }
             }
         }
         
@@ -571,12 +642,14 @@ WRAPPER_EOF
                     
                     echo "📡 Endpoints de los servicios:"
                     MINIKUBE_IP=$(minikube ip)
-                    echo "  user-service:      http://${MINIKUBE_IP}:30700"
-                    echo "  product-service:   http://${MINIKUBE_IP}:30500"
-                    echo "  favourite-service: http://${MINIKUBE_IP}:30800"
-                    echo "  order-service:     http://${MINIKUBE_IP}:30300"
-                    echo "  payment-service:   http://${MINIKUBE_IP}:30400"
-                    echo "  shipping-service:  http://${MINIKUBE_IP}:30600"
+                    echo "  🌐 API Gateway:      http://${MINIKUBE_IP}:30100"
+                    echo "  🔀 Proxy:            http://${MINIKUBE_IP}:30200"
+                    echo "  👤 user-service:     http://${MINIKUBE_IP}:30700"
+                    echo "  📦 product-service:  http://${MINIKUBE_IP}:30500"
+                    echo "  ❤️  favourite-service: http://${MINIKUBE_IP}:30800"
+                    echo "  🛒 order-service:    http://${MINIKUBE_IP}:30300"
+                    echo "  💳 payment-service:  http://${MINIKUBE_IP}:30400"
+                    echo "  🚚 shipping-service: http://${MINIKUBE_IP}:30600"
                     echo ""
                     
                     echo "========================================="
